@@ -36,7 +36,7 @@ general:
   # See the chapter CrowdStrike Falcon in the docs page Attack Range Features.
 
   carbon_black_cloud: "0"
-  # Enable/Disable VMWare Carbon Black Cloud log forwarding to Splunkby setting this to 1 or 0.
+  # Enable/Disable VMWare Carbon Black Cloud log forwarding to Splunk by setting this to 1 or 0.
 
   carbon_black_cloud_company_code: ""
   carbon_black_cloud_s3_bucket: ""
@@ -196,7 +196,7 @@ windows_servers_default:
 
   windows_image: "windows-server-2019"
   # Name of the image of the Windows Server. 
-  # allowd values: windows-server-2016, windows-server-2019, windows-server-2022
+  # allowed values: windows-server-2016, windows-server-2019, windows-server-2022
 
   create_domain: "0"
   # Create Domain will turn this Windows Server into a Domain Controller. Enable by setting this to 1.

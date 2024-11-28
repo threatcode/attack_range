@@ -7,7 +7,9 @@ config.vm.define "ar-win-{{ config.general.key_name }}-{{ config.general.attack_
     config.winrm.basic_auth_only = true
     config.winrm.timeout = 300
     config.winrm.retry_limit = 20
-    config.vm.network "forwarded_port", guest: 5985, host: "{{ 5985 + count }}"
+    config.winrm.port = "{{ 6985 + count }}"
+    config.winrm.guest_port = "{{ 6985 + count }}"
+    config.vm.network "forwarded_port", guest: 5985, host: "{{ 6985 + count }}"
     config.vm.network "forwarded_port", guest: 3389, host: "{{ 5389 + count }}"
     config.vm.network :private_network, ip: "192.168.56.{{ 14 + count }}"
     config.vm.synced_folder '.', '/vagrant', disabled: true
@@ -17,7 +19,11 @@ config.vm.define "ar-win-{{ config.general.key_name }}-{{ config.general.attack_
     config.vm.provision "file", run: "always" do |file|
       windows_vars = {
         "ansible_user" => "Administrator",
+        "ansible_port" => "{{ 6985 + count }}",
         "ansible_password" => "{{ config.general.attack_range_password }}",
+        "ansible_winrm_scheme" => "http",
+        "ansible_winrm_operation_timeout_sec" => 300,
+        "ansible_winrm_read_timeout_sec" => 400,
         "attack_range_password" => "{{ config.general.attack_range_password }}",
         "general" => {{ config.general | tojson }},
         "splunk_server" => {{ config.splunk_server | tojson }},
@@ -25,15 +31,15 @@ config.vm.define "ar-win-{{ config.general.key_name }}-{{ config.general.attack_
         "windows_servers" => {{ config.windows_servers[count] | tojson }}
       }
       
-      File.write("windows_vars.json", JSON.pretty_generate(windows_vars))
+      File.write("windows_vars_{{ count }}.json", JSON.pretty_generate(windows_vars))
       
-      file.source = "windows_vars.json"
-      file.destination = "/tmp/windows_vars.json"
+      file.source = "windows_vars_{{ count }}.json"
+      file.destination = "/tmp/windows_vars_{{ count }}.json"
     end
 
     config.vm.provision "ansible" do |ansible|
       ansible.playbook = "../terraform/ansible/windows.yml"
-      ansible.extra_vars = "windows_vars.json"
+      ansible.extra_vars = "windows_vars_{{ count }}.json"
       ansible.compatibility_mode = "2.0"
     end
   

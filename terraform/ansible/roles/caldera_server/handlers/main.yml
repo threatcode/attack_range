@@ -1,0 +1,10 @@
+---
+- name: Enable Service [Caldera]
+  become: true
+  ansible.builtin.systemd_service:
+    state: restarted
+    enabled: true
+    daemon_reload: true
+    name: caldera.service
+  listen: caldera_systemd
+  when: caldera_server_skip_start == false

@@ -1,0 +1,16 @@
+- hosts: all
+  gather_facts: false
+  become: false
+  roles:
+    - role: caldera_server
+      vars:
+        caldera_server_action: "install"
+        caldera_server_skip_start: true
+      when: aws_eip == "1"
+
+    - role: caldera_server
+      vars:
+        caldera_server_action: "install"
+        caldera_server_skip_start: false
+      when: aws_eip == "0"
+

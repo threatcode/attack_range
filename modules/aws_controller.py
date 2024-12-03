@@ -252,7 +252,7 @@ class AwsController(AttackRangeController):
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["aws"]["private_key_path"]
-                            + " centos@"
+                            + " ec2-user@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
@@ -268,7 +268,7 @@ class AwsController(AttackRangeController):
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["aws"]["private_key_path"]
-                            + " centos@"
+                            + " ec2-user@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]

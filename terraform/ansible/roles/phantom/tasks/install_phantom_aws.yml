@@ -1,17 +1,16 @@
 ---
-# Install Phantom from RPM on a fresh CentOS 7 instance
 
-- name: Change mirror to vault.centos.org
-  shell: sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo
-  become: yes
+# - name: Change mirror to vault.centos.org
+#   shell: sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo
+#   become: yes
 
-- name: Uncomment baseurl lines
-  shell: sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo
-  become: yes
+# - name: Uncomment baseurl lines
+#   shell: sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo
+#   become: yes
 
-- name: Comment out mirrorlist lines
-  shell: sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
-  become: yes
+# - name: Comment out mirrorlist lines
+#   shell: sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
+#   become: yes
 
 - name: Update all packages
   become: yes

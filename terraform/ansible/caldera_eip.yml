@@ -1,0 +1,8 @@
+- hosts: all
+  gather_facts: false
+  become: false
+  roles:
+    - role: caldera_server
+      vars:
+        caldera_server_action: "update_eip"
+        caldera_server_skip_start: false

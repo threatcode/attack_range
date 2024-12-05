@@ -162,6 +162,10 @@ python attack_range.py replay --file_name attack_data/dump.log --source test --s
   * Preconfigured Kali Linux machine for penetration testing
   * ssh connection over configured ssh key
 
+- [Caldera](https://github.com/mitre/caldera)
+  * Attack Simulation with [Caldera](https://github.com/mitre/caldera)
+  * Can be enabled, disabled and configured over [attack_range.yml](https://github.com/splunk/attack_range/blob/develop/attack_range.yml)
+
 
 ## Support 📞
 Please use the [GitHub issue tracker](https://github.com/splunk/attack_range/issues) to submit bugs or request features.
@@ -200,3 +204,4 @@ We welcome feedback and contributions from the community! Please see our [contri
 * [Micheal Haag](https://twitter.com/M_haggis)
 * Gowthamaraj Rajendran
 * [Christopher Caldwell](https://github.com/cudgel)
+* [Zachary Christensen](https://github.com/ZachTheSplunker)

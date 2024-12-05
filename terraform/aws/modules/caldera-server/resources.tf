@@ -17,7 +17,7 @@ data "aws_ami" "caldera_server" {
 
 resource "aws_instance" "caldera_server" {
   count                  = var.caldera_server.caldera_server == "1" ? 1 : 0
-  ami                    = data.aws_ami.caldera_server[count.index].id
+  ami                    = data.aws_ami.caldera_server[0].id
   instance_type          = "m5.2xlarge"
   key_name               = var.general.key_name
   subnet_id              = var.ec2_subnet_id
@@ -71,40 +71,3 @@ resource "aws_instance" "caldera_server" {
 
 }
 
-resource "aws_eip" "caldera_ip" {
-  count    = (var.caldera_server.caldera_server == "1") && (var.aws.use_elastic_ips == "1") ? 1 : 0
-  instance = aws_instance.caldera_server[0].id
-
-  provisioner "remote-exec" {
-    inline = ["echo booted"]
-
-    connection {
-      type        = "ssh"
-      user        = "admin"
-      host        = self.public_ip
-      private_key = file(var.aws.private_key_path)
-    }
-  }
-
-  provisioner "local-exec" {
-    working_dir = "../ansible"
-    command = <<-EOT
-      cat <<EOF > vars/caldera_vars.json
-      {
-        "ansible_python_interpreter": "/usr/bin/python3",
-        "general": ${jsonencode(var.general)},
-        "aws": ${jsonencode(var.aws)},
-        "caldera_server": ${jsonencode(var.caldera_server)},
-        "public_ip": ${jsonencode(self.public_ip)}
-      }
-      EOF
-    EOT
-  }
-
-  provisioner "local-exec" {
-    working_dir = "../ansible"
-    command = <<-EOT
-      ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u admin --private-key '${var.aws.private_key_path}' -i '${self.public_ip},' caldera_eip.yml -e "@vars/caldera_vars.json"
-    EOT
-  }
-}

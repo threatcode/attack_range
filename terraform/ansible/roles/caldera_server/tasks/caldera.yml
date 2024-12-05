@@ -6,7 +6,6 @@
 
 - name: Update URL [Caldera]
   ansible.builtin.import_tasks: update_ip.yml
-  when: caldera_server_skip_start == false
 
 - name: Update Password [Caldera]
   ansible.builtin.replace:
@@ -31,7 +30,7 @@
     nvm=$(find /home/admin/.nvm/versions/node/*/bin -type d)
     echo "PATH=$reqs:$upx:$nvm" > caldera.env
     pipenv install
-    pipenv run pip install -r requirements-dev.txt
+    pipenv run pip install -r requirements.txt
 
 - name: Create Systemd service [Caldera]
   become: true

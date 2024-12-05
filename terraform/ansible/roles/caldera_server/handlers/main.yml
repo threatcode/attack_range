@@ -7,4 +7,3 @@
     daemon_reload: true
     name: caldera.service
   listen: caldera_systemd
-  when: caldera_server_skip_start == false

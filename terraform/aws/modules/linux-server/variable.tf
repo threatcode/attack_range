@@ -8,3 +8,4 @@ variable "simulation" { }
 variable "splunk_server" { }
 variable "zeek_server" { }
 variable "snort_server" { }
+variable "caldera_server" { }

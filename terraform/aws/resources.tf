@@ -41,7 +41,8 @@ module "windows-server" {
   windows_servers = var.windows_servers
   simulation = var.simulation
   splunk_server = var.splunk_server
-  
+  caldera_server = var.caldera_server
+  # depends_on = [ module.caldera-server.caldera_servers ]
 }
 
 module "linux-server" {
@@ -55,6 +56,8 @@ module "linux-server" {
   linux_servers = var.linux_servers
   simulation = var.simulation
   splunk_server = var.splunk_server
+  caldera_server = var.caldera_server
+  # depends_on = [ module.caldera-server.caldera_servers ]
 }
 
 module "kali-server" {
@@ -102,4 +105,13 @@ module "snort-server" {
   linux_servers = var.linux_servers
   linux_server_instances = module.linux-server.linux_servers
   splunk_server = var.splunk_server
+}
+
+module "caldera-server" {
+  source = "./modules/caldera-server"
+	vpc_security_group_ids = module.networkModule.sg_vpc_id
+	ec2_subnet_id = module.networkModule.ec2_subnet_id
+  general = var.general
+  caldera_server = var.caldera_server
+  aws = var.aws
 }

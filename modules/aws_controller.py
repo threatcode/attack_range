@@ -327,6 +327,20 @@ class AwsController(AttackRangeController):
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
+                elif instance_name.startswith("ar-caldera"):
+                    messages.append(
+                        "\nAccess Caldera via:\n\tWeb > http://"
+                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + ":8888"
+                        + "\n\tusername: red \n\tpassword: "
+                        + self.config["general"]["attack_range_password"]
+                        + "\n\tSSH > ssh -i"
+                        + self.config["aws"]["private_key_path"]
+                        + " admin@"
+                        + instance["NetworkInterfaces"][0]["Association"][
+                                "PublicIp"
+                            ]
+                    )
             else:
                 response.append(
                     [instance["Tags"][0]["Value"], instance["State"]["Name"]]

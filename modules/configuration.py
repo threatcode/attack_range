@@ -442,6 +442,13 @@ starting configuration for AT-ST mech walker
             "when": lambda answers: answers["windows_server_one"]
             and answers["windows_server_one_dc"],
         },
+        {
+            "type": "confirm",
+            "message": "should we install a MITRE Caldera agent on the windows server",
+            "name": "windows_server_one_caldera_agent",
+            "default": False,
+            "when": lambda answers: answers["windows_server_one"],
+        },
     ]
 
     answers = questionary.prompt(questions)
@@ -463,6 +470,8 @@ starting configuration for AT-ST mech walker
         if "windows_server_one_bad_blood" in answers:
             if answers["windows_server_one_bad_blood"]:
                 configuration["windows_servers"][0]["bad_blood"] = "1"
+        if answers["windows_server_one_caldera_agent"]:
+            configuration["windows_servers"][0]["install_caldera_agent"] = "1"
 
         questions = [
             {
@@ -493,6 +502,13 @@ starting configuration for AT-ST mech walker
                 "default": False,
                 "when": lambda answers: answers["windows_server_two"],
             },
+            {
+                "type": "confirm",
+                "message": "should we install a MITRE Caldera agent on the windows server",
+                "name": "windows_server_two_caldera_agent",
+                "default": False,
+                "when": lambda answers: answers["windows_server_two"],
+            },
         ]
 
         answers = questionary.prompt(questions)
@@ -510,6 +526,8 @@ starting configuration for AT-ST mech walker
                     configuration["windows_servers"][1]["join_domain"] = "1"
             if answers["windows_server_two_red_team_tools"]:
                 configuration["windows_servers"][1]["install_red_team_tools"] = "1"
+            if answers["windows_server_two_caldera_agent"]:
+                configuration["windows_servers"][1]["install_caldera_agent"] = "1"
 
     questions = [
         {
@@ -517,6 +535,13 @@ starting configuration for AT-ST mech walker
             "message": "shall we build a linux server",
             "name": "linux_server",
             "default": False,
+        },
+        {
+            "type": "confirm",
+            "message": "should we install a MITRE Caldera agent on the linux server",
+            "name": "linux_server_caldera_agent",
+            "default": False,
+            "when": lambda answers: answers["linux_server"],
         },
         {
             "type": "confirm",
@@ -558,6 +583,13 @@ starting configuration for AT-ST mech walker
             "name": "phantom_installer",
             "when": lambda answers: answers["phantom"],
         },
+        {
+            "type": "confirm",
+            "message": "shall we build a MITRE Caldera server for attack simulation",
+            "name": "caldera_server",
+            "default": False,
+            "when": lambda answers: configuration["general"]["cloud_provider"] == "aws",
+        },
     ]
 
     answers = questionary.prompt(questions)
@@ -569,6 +601,9 @@ starting configuration for AT-ST mech walker
                 "hostname": "ar-linux",
             }
         )
+        if "linux_server_caldera_agent" in answers:
+            if answers["linux_server_caldera_agent"]:
+                configuration["linux_servers"][0]["install_caldera_agent"] = "1"
 
     if configuration["general"]["cloud_provider"] == "aws":
         if answers["kali_machine"]:
@@ -586,6 +621,10 @@ starting configuration for AT-ST mech walker
         if answers["snort_server"]:
             configuration["snort_server"] = dict()
             configuration["snort_server"]["snort_server"] = "1"
+        
+        if answers["caldera_server"]:
+            configuration["caldera_server"] = dict()
+            configuration["caldera_server"]["caldera_server"] = "1"
 
     if answers["phantom"]:
         configuration["phantom_server"] = dict()

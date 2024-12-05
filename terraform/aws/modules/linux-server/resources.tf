@@ -57,6 +57,7 @@ resource "aws_instance" "linux_server" {
         "splunk_server": ${jsonencode(var.splunk_server)},
         "linux_servers": ${jsonencode(var.linux_servers[count.index])},
         "simulation": ${jsonencode(var.simulation)},
+        "caldera_server": ${jsonencode(var.caldera_server)},
       }
       EOF
     EOT

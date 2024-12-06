@@ -28,7 +28,7 @@ RUN python3.12 -m pip install --upgrade azure-cli
 RUN curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.18.18.zip -o awscliv2.zip && \
 		unzip awscliv2.zip && \
 		./aws/install --update && \
-		rm -rf aws && \
+		rm -rf /aws && \
 		complete -C aws_completer aws
 
 RUN git clone https://github.com/splunk/attack_range.git

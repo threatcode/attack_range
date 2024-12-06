@@ -24,13 +24,7 @@ RUN python3.12 -m pip install --upgrade setuptools wheel
 
 RUN python3.12 -m pip install --upgrade pip
 
-RUN python3.12 -m pip install --upgrade azure-cli
-
-RUN curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.18.18.zip -o awscliv2.zip && \
-		unzip awscliv2.zip && \
-		./aws/install --update && \
-		rm -rf /aws && \
-  		rm -rf /awscliv2.zip
+RUN python3.12 -m pip install --upgrade awscli azure-cli
 
 RUN git clone https://github.com/splunk/attack_range.git
 

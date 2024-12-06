@@ -12,7 +12,8 @@ RUN apt-get install -y git unzip python3-pip curl vim
 
 RUN curl -s https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip -o terraform.zip && \
          unzip terraform.zip && \
-         mv terraform /usr/local/bin/
+         mv terraform /usr/local/bin/ && \
+	 rm -rf /terraform.zip
 
 RUN echo 'alias python=python3.12' >> ~/.bashrc
 
@@ -28,7 +29,8 @@ RUN python3.12 -m pip install --upgrade azure-cli
 RUN curl https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.18.18.zip -o awscliv2.zip && \
 		unzip awscliv2.zip && \
 		./aws/install --update && \
-		rm -rf /aws
+		rm -rf /aws && \
+  		rm -rf /awscliv2.zip
 
 RUN git clone https://github.com/splunk/attack_range.git
 

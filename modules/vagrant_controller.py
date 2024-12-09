@@ -30,6 +30,21 @@ class VagrantController(AttackRangeController):
         vagrantfile += self.read_vagrant_file('splunk_server/Vagrantfile')
         vagrantfile += '\n\n'
 
+        for i in range(len(self.config["windows_servers"])):
+            image_name = self.config["windows_servers"][i]["windows_image"]
+            if image_name.startswith("windows-server-2016"):
+                self.config["windows_servers"][i][
+                    "windows_image"
+                ] = "d1vious/windows2016"
+
+            elif image_name.startswith("windows-server-2019"):
+                self.config["windows_servers"][i][
+                    "windows_image"
+                ] = "StefanScherer/windows_2019"
+            else:
+                self.logger.error("Image " + image_name + " not supported for Attack Range local provider.")
+                sys.exit(1)
+
         for idx, x in enumerate(self.config['windows_servers']):
             vagrantfile += self.read_vagrant_file_array('windows_server/Vagrantfile', x, idx)
             vagrantfile += '\n\n'

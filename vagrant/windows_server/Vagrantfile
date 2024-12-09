@@ -1,5 +1,5 @@
 config.vm.define "ar-win-{{ config.general.key_name }}-{{ config.general.attack_range_name }}-{{ count }}" do |config|
-    config.vm.box = "d1vious/windows2016"
+    config.vm.box = "{{ server.windows_image }}"
     config.vm.hostname = "{{ server.hostname }}"
     config.vm.boot_timeout = 600
     config.vm.communicator = "winrm"
@@ -28,7 +28,8 @@ config.vm.define "ar-win-{{ config.general.key_name }}-{{ config.general.attack_
         "general" => {{ config.general | tojson }},
         "splunk_server" => {{ config.splunk_server | tojson }},
         "simulation" => {{ config.simulation | tojson }},
-        "windows_servers" => {{ config.windows_servers[count] | tojson }}
+        "windows_servers" => {{ config.windows_servers[count] | tojson }},
+        "caldera_server" => {{ config.caldera_server | tojson }}
       }
       
       File.write("windows_vars_{{ count }}.json", JSON.pretty_generate(windows_vars))

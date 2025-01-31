@@ -7,7 +7,7 @@ import yaml
 import json
 
 from python_terraform import Terraform, IsNotFlagged
-from modules import aws_service, splunk_sdk
+from modules import gcp_service, splunk_sdk
 from tabulate import tabulate
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
@@ -17,41 +17,41 @@ from modules.art_simulation_controller import ArtSimulationController
 from modules.purplesharp_simulation_controller import PurplesharpSimulationController
 
 
-class AwsController(AttackRangeController):
+class GCPController(AttackRangeController):
 
     def __init__(self, config: dict):
         super().__init__(config)
         statefile = self.config["general"]["attack_range_name"] + ".terraform.tfstate"
         self.config["general"]["statepath"] = os.path.join(
-            os.path.dirname(__file__), "../terraform/aws/state", statefile
+            os.path.dirname(__file__), "../terraform/gcp/state", statefile
         )
 
-        if not aws_service.check_region(self.config["aws"]["region"]):
+        if not gcp_service.check_region(self.config["gcp"]["region"]):
             self.logger.error(
-                "AWS cli region and region in config file are not the same."
+                "gcp cli region and region in config file are not the same."
             )
             sys.exit(1)
 
         backend_path_tmp = os.path.join(
-            os.path.dirname(__file__), "../terraform/aws/backend.tf.tmp"
+            os.path.dirname(__file__), "../terraform/gcp/backend.tf.tmp"
         )
         backend_path = os.path.join(
-            os.path.dirname(__file__), "../terraform/aws/backend.tf"
+            os.path.dirname(__file__), "../terraform/gcp/backend.tf"
         )
 
-        if self.config["aws"]["use_remote_state"] == "1":
+        if self.config["gcp"]["use_remote_state"] == "1":
             with open(backend_path_tmp, "r") as file:
                 filedata = file.read()
-            filedata = filedata.replace("[region]", self.config["aws"]["region"])
+            filedata = filedata.replace("[region]", self.config["gcp"]["region"])
             filedata = filedata.replace(
-                "[bucket]", self.config["aws"]["tf_remote_state_s3_bucket"]
+                "[bucket]", self.config["gcp"]["tf_remote_state_s3_bucket"]
             )
             filedata = filedata.replace(
                 "[name]", self.config["general"]["attack_range_name"]
             )
             filedata = filedata.replace(
                 "[dynamodb_table]",
-                self.config["aws"]["tf_remote_state_dynamo_db_table"],
+                self.config["gcp"]["tf_remote_state_dynamo_db_table"],
             )
             with open(backend_path, "w+") as file:
                 file.write(filedata)
@@ -60,7 +60,7 @@ class AwsController(AttackRangeController):
             if os.path.isfile(backend_path):
                 os.remove(backend_path)
 
-        working_dir = os.path.join(os.path.dirname(__file__), "../terraform/aws")
+        working_dir = os.path.join(os.path.dirname(__file__), "../terraform/gcp")
         self.terraform = Terraform(
             working_dir=working_dir,
             variables=config,
@@ -92,7 +92,7 @@ class AwsController(AttackRangeController):
         cwd = os.getcwd()
         os.system(
             "cd "
-            + os.path.join(os.path.dirname(__file__), "../terraform/aws")
+            + os.path.join(os.path.dirname(__file__), "../terraform/gcp")
             + "&& terraform init -migrate-state"
         )
         os.system("cd " + cwd)
@@ -112,7 +112,7 @@ class AwsController(AttackRangeController):
         cwd = os.getcwd()
         os.system(
             "cd "
-            + os.path.join(os.path.dirname(__file__), "../terraform/aws")
+            + os.path.join(os.path.dirname(__file__), "../terraform/gcp")
             + "&& terraform init "
         )
         os.system("cd " + cwd)
@@ -129,41 +129,41 @@ class AwsController(AttackRangeController):
     def stop(self, instances_ids=None) -> None:
         instances = []
         if instances_ids is None:
-            instances = aws_service.get_all_instances(
+            instances = gcp_service.get_all_instances(
                 self.config["general"]["key_name"],
                 self.config["general"]["attack_range_name"],
-                self.config["aws"]["region"],
+                self.config["gcp"]["region"],
             )
         else:
-            instances = aws_service.get_instances_by_ids(
+            instances = gcp_service.get_instances_by_ids(
                 instances_ids,
                 self.config["general"]["key_name"],
                 self.config["general"]["key_name"],
                 self.config["general"]["attack_range_name"],
-                self.config["aws"]["region"],
+                self.config["gcp"]["region"],
             )
-        aws_service.change_ec2_state(
-            instances, "stopped", self.logger, self.config["aws"]["region"]
+        gcp_service.change_instance_state(
+            instances, "stopped", self.logger, self.config["gcp"]["region"]
         )
 
     def resume(self, instances_ids=None) -> None:
         instances = []
         if instances_ids is None:
-            instances = aws_service.get_all_instances(
+            instances = gcp_service.get_all_instances(
                 self.config["general"]["key_name"],
                 self.config["general"]["attack_range_name"],
-                self.config["aws"]["region"],
+                self.config["gcp"]["region"],
             )
         else:
-            instances = aws_service.get_instances_by_ids(
+            instances = gcp_service.get_instances_by_ids(
                 instances_ids,
                 self.config["general"]["key_name"],
                 self.config["general"]["key_name"],
                 self.config["general"]["attack_range_name"],
-                self.config["aws"]["region"],
+                self.config["gcp"]["region"],
             )
-        aws_service.change_ec2_state(
-            instances, "running", self.logger, self.config["aws"]["region"]
+        gcp_service.change_instance_state(
+            instances, "running", self.logger, self.config["gcp"]["region"]
         )
 
     def simulate(self, engine, target, technique, playbook) -> None:
@@ -177,10 +177,10 @@ class AwsController(AttackRangeController):
 
     def show(self) -> None:
         self.logger.info("[action] > show\n")
-        instances = aws_service.get_all_instances(
+        instances = gcp_service.get_all_instances(
             self.config["general"]["key_name"],
             self.config["general"]["attack_range_name"],
-            self.config["aws"]["region"],
+            self.config["gcp"]["region"],
         )
         response = []
         messages = []
@@ -216,7 +216,7 @@ class AwsController(AttackRangeController):
                                 "PublicIp"
                             ]
                             + ":8000\n\tSSH > ssh -i"
-                            + self.config["aws"]["private_key_path"]
+                            + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
@@ -231,7 +231,7 @@ class AwsController(AttackRangeController):
                                 "PublicIp"
                             ]
                             + ":8000\n\tSSH > ssh -i"
-                            + self.config["aws"]["private_key_path"]
+                            + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
@@ -251,7 +251,7 @@ class AwsController(AttackRangeController):
                             ]
                             + ":8443"
                             + "\n\tSSH > ssh -i"
-                            + self.config["aws"]["private_key_path"]
+                            + self.config["gcp"]["private_key_path"]
                             + " centos@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
@@ -267,7 +267,7 @@ class AwsController(AttackRangeController):
                             ]
                             + ":8443"
                             + "\n\tSSH > ssh -i"
-                            + self.config["aws"]["private_key_path"]
+                            + self.config["gcp"]["private_key_path"]
                             + " centos@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
@@ -285,7 +285,7 @@ class AwsController(AttackRangeController):
                 elif instance_name.startswith("ar-linux"):
                     messages.append(
                         "\nAccess Linux via:\n\tSSH > ssh -i"
-                        + self.config["aws"]["private_key_path"]
+                        + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                         + "\n\tusername: ubuntu \n\tpassword: "
@@ -294,7 +294,7 @@ class AwsController(AttackRangeController):
                 elif instance_name.startswith("ar-kali"):
                     messages.append(
                         "\nAccess Kali via:\n\tSSH > ssh -i"
-                        + self.config["aws"]["private_key_path"]
+                        + self.config["gcp"]["private_key_path"]
                         + " kali@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                         + "\n\tusername: kali \n\tpassword: "
@@ -303,7 +303,7 @@ class AwsController(AttackRangeController):
                 elif instance_name.startswith("ar-nginx"):
                     messages.append(
                         "\nAccess Nginx Web Proxy via:\n\tSSH > ssh -i"
-                        + self.config["aws"]["private_key_path"]
+                        + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                         + "\n\tusername: kali \n\tpassword: "
@@ -312,7 +312,7 @@ class AwsController(AttackRangeController):
                 elif instance_name.startswith("ar-zeek"):
                     messages.append(
                         "\nAccess Zeek via:\n\tSSH > ssh -i"
-                        + self.config["aws"]["private_key_path"]
+                        + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                         + "\n\tusername: ubuntu \n\tpassword: "
@@ -321,7 +321,7 @@ class AwsController(AttackRangeController):
                 elif instance_name.startswith("ar-snort"):
                     messages.append(
                         "\nAccess Snort via:\n\tSSH > ssh -i"
-                        + self.config["aws"]["private_key_path"]
+                        + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                         + "\n\tusername: ubuntu \n\tpassword: "
@@ -373,11 +373,11 @@ class AwsController(AttackRangeController):
             + self.config["general"]["attack_range_name"]
         )
         splunk_sdk.export_search(
-            aws_service.get_single_instance_public_ip(
+            gcp_service.get_single_instance_public_ip(
                 splunk_instance,
                 self.config["general"]["key_name"],
                 self.config["general"]["attack_range_name"],
-                self.config["aws"]["region"],
+                self.config["gcp"]["region"],
             ),
             s=dump_search,
             password=self.config["general"]["attack_range_password"],
@@ -390,7 +390,7 @@ class AwsController(AttackRangeController):
         ansible_vars = {}
         ansible_vars["file_name"] = file_name
         ansible_vars["ansible_user"] = "ubuntu"
-        ansible_vars["ansible_ssh_private_key_file"] = self.config["aws"][
+        ansible_vars["ansible_ssh_private_key_file"] = self.config["gcp"][
             "private_key_path"
         ]
         ansible_vars["attack_range_password"] = self.config["general"][
@@ -407,11 +407,11 @@ class AwsController(AttackRangeController):
             + "-"
             + self.config["general"]["attack_range_name"]
         )
-        splunk_ip = aws_service.get_single_instance_public_ip(
+        splunk_ip = gcp_service.get_single_instance_public_ip(
             splunk_instance,
             self.config["general"]["key_name"],
             self.config["general"]["attack_range_name"],
-            self.config["aws"]["region"],
+            self.config["gcp"]["region"],
         )
         cmdline = "-i %s, -u %s" % (splunk_ip, ansible_vars["ansible_user"])
         runner = ansible_runner.run(
@@ -423,31 +423,31 @@ class AwsController(AttackRangeController):
         )
 
     def create_remote_backend(self, backend_name) -> None:
-        if not aws_service.check_s3_bucket(backend_name):
+        if not gcp_service.check_gcs_bucket(backend_name):
             self.logger.info(
                 "Can not access remote S3 bucket with name " + backend_name
             )
             self.logger.info("Try to create a S3 for remote backend.")
-            aws_service.create_s3_bucket(
-                backend_name, self.config["aws"]["region"], self.logger
+            gcp_service.create_s3_bucket(
+                backend_name, self.config["gcp"]["region"], self.logger
             )
 
         # create DynamoDB
-        aws_service.create_dynamoo_db(
-            backend_name, self.config["aws"]["region"], self.logger
+        gcp_service.create_bigtable_instance_and_table(
+            backend_name, self.config["gcp"]["region"], self.logger
         )
 
-        self.config["aws"]["private_key_path"] = str(
+        self.config["gcp"]["private_key_path"] = str(
             Path(backend_name + ".key").resolve()
         )
         self.config["general"]["key_name"] = backend_name
 
         # privat key in secrets manager
-        if not aws_service.check_secret_exists(backend_name):
-            key_material = aws_service.create_key_pair(
-                backend_name, self.config["aws"]["region"], self.logger
+        if not gcp_service.check_secret_exists(backend_name):
+            key_material = gcp_service.create_key_pair(
+                backend_name, self.config["gcp"]["region"], self.logger
             )
-            aws_service.create_secret(
+            gcp_service.create_secret(
                 backend_name, key_material, self.config, self.logger
             )
 
@@ -459,32 +459,32 @@ class AwsController(AttackRangeController):
         # write versions.tf
         j2_env = Environment(
             loader=FileSystemLoader(
-                os.path.join(os.path.dirname(__file__), "../terraform/aws")
+                os.path.join(os.path.dirname(__file__), "../terraform/gcp")
             ),
             trim_blocks=True,
         )
         template = j2_env.get_template("versions.tf.j2")
         output = template.render(
-            backend_name=backend_name, region=self.config["aws"]["region"]
+            backend_name=backend_name, region=self.config["gcp"]["region"]
         )
-        with open("terraform/aws/versions.tf", "w") as f:
+        with open("terraform/gcp/versions.tf", "w") as f:
             output = output.encode("ascii", "ignore").decode("ascii")
             f.write(output)
 
     def delete_remote_backend(self, backend_name) -> None:
-        aws_service.delete_s3_bucket(
-            backend_name, self.config["aws"]["region"], self.logger
+        gcp_service.delete_gcs_bucket(
+            backend_name, self.config["gcp"]["region"], self.logger
         )
-        aws_service.delete_dynamo_db(
-            backend_name, self.config["aws"]["region"], self.logger
+        gcp_service.delete_bigtable_table(
+            backend_name, self.config["gcp"]["region"], self.logger
         )
-        aws_service.delete_secret(backend_name, self.logger)
-        aws_service.delete_key_pair(
-            backend_name, self.config["aws"]["region"], self.logger
+        gcp_service.delete_secret(backend_name, self.logger)
+        gcp_service.delete_key_pair(
+            backend_name, self.config["gcp"]["region"], self.logger
         )
         try:
             os.remove(
-                os.path.join(os.path.dirname(__file__), "../terraform/aws/versions.tf")
+                os.path.join(os.path.dirname(__file__), "../terraform/gcp/versions.tf")
             )
         except Exception as e:
             self.logger.error(e)
@@ -496,16 +496,16 @@ class AwsController(AttackRangeController):
             self.logger.error(e)
 
     def init_remote_backend(self, backend_name) -> None:
-        if not aws_service.check_s3_bucket(backend_name):
+        if not gcp_service.check_gcs_bucket(backend_name):
             self.logger.error("Can't find S3 bucket with name " + backend_name)
             sys.exit(1)
-        if not aws_service.check_secret_exists(backend_name):
+        if not gcp_service.check_secret_exists(backend_name):
             self.logger.error("Secret doesn't exist with name " + backend_name)
             sys.exit(1)
 
-        aws_service.get_secret_key(backend_name, self.logger)
-        config = aws_service.get_secret_config(backend_name, self.logger)
-        config["aws"]["private_key_path"] = str(Path(backend_name + ".key").resolve())
+        gcp_service.get_secret_key(backend_name, self.logger)
+        config = gcp_service.get_secret_config(backend_name, self.logger)
+        config["gcp"]["private_key_path"] = str(Path(backend_name + ".key").resolve())
         with open(
             os.path.join(os.path.dirname(__file__), "../attack_range.yml"), "w"
         ) as outfile:
@@ -514,14 +514,14 @@ class AwsController(AttackRangeController):
         # write versions.tf
         j2_env = Environment(
             loader=FileSystemLoader(
-                os.path.join(os.path.dirname(__file__), "../terraform/aws")
+                os.path.join(os.path.dirname(__file__), "../terraform/gcp")
             ),
             trim_blocks=True,
         )
         template = j2_env.get_template("versions.tf.j2")
         output = template.render(
-            backend_name=backend_name, region=self.config["aws"]["region"]
+            backend_name=backend_name, region=self.config["gcp"]["region"]
         )
-        with open("terraform/aws/versions.tf", "w") as f:
+        with open("terraform/gcp/versions.tf", "w") as f:
             output = output.encode("ascii", "ignore").decode("ascii")
             f.write(output)

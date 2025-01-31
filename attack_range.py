@@ -14,7 +14,7 @@ os.environ['OBJC_DISABLE_INITIALIZE_FORK_SAFETY'] = 'YES'
 
 def init(args):
     config_path = args.config
-    print("""                   
+    print("""
                               __
                             .d$$b
                           .' TO$;\\
@@ -35,7 +35,7 @@ def init(args):
     ._.'-'`-'  ")/         /;/;
  `-.-"..--""   " /         /  ;
 .-" ..--""        -'          :
-..--""--.-"         (\\     .-(\\
+..--""--.-"         (\\      .-(\\
   ..--""              `-\\(\\/;`
     _.                      :
                             ;`-
@@ -53,72 +53,96 @@ By: Splunk Threat Research Team [STRT] - research@splunk.com
     if config['general']['cloud_provider'] == 'aws':
         config.pop('azure')
         config.pop('local')
+        config.pop('gcp')
         controller = AwsController(config)
     elif config['general']['cloud_provider'] == 'azure':
         config.pop('aws')
         config.pop('local')
+        config.pop('gcp')
         controller = AzureController(config)
+    elif config['general']['cloud_provider'] == 'gcp':
+        config.pop('aws')
+        config.pop('local')
+        config.pop('azure')
+        controller = GCPController(config)
     elif config['general']['cloud_provider'] == 'local':
         from modules.vagrant_controller import VagrantController
         config.pop('azure')
         config.pop('aws')
+        config.pop('gcp')
         controller = VagrantController(config)
-    
+
     return controller
 
 
 def simulate(args):
     controller = init(args)
-    controller.simulate(args.engine, args.target, args.technique, args.playbook)
+    controller.simulate(args.engine, args.target,
+                        args.technique, args.playbook)
+
 
 def dump(args):
     controller = init(args)
     controller.dump(args.file_name, args.search, args.earliest, args.latest)
 
+
 def replay(args):
     controller = init(args)
     controller.replay(args.file_name, args.index, args.sourcetype, args.source)
+
 
 def build(args):
     controller = init(args)
     controller.build()
 
+
 def destroy(args):
     controller = init(args)
     controller.destroy()
 
+
 def stop(args):
     controller = init(args)
-    instance_ids = [id.strip() for id in args.instance_ids.split(',')] if args.instance_ids else None
+    instance_ids = [id.strip() for id in args.instance_ids.split(
+        ',')] if args.instance_ids else None
     controller.stop(instance_ids)
-    
+
+
 def resume(args):
     controller = init(args)
-    instance_ids = [id.strip() for id in args.instance_ids.split(',')] if args.instance_ids else None
+    instance_ids = [id.strip() for id in args.instance_ids.split(
+        ',')] if args.instance_ids else None
     controller.resume(instance_ids)
+
 
 def packer(args):
     controller = init(args)
     controller.packer(args.image_name)
 
+
 def configure(args):
     configuration.new(args.config)
+
 
 def show(args):
     controller = init(args)
     controller.show()
 
+
 def create_remote_backend(args):
     controller = init(args)
     controller.create_remote_backend(args.backend_name)
+
 
 def delete_remote_backend(args):
     controller = init(args)
     controller.delete_remote_backend(args.backend_name)
 
+
 def init_remote_backend(args):
     controller = init(args)
     controller.init_remote_backend(args.backend_name)
+
 
 def main(args):
     """
@@ -134,20 +158,33 @@ def main(args):
                         help="path to the configuration file of the attack range")
     parser.set_defaults(func=lambda _: parser.print_help())
 
-    actions_parser = parser.add_subparsers(title="attack Range actions", dest="action")
-    configure_parser = actions_parser.add_parser("configure", help="configure a new attack range")
-    build_parser = actions_parser.add_parser("build", help="builds attack range instances")
-    simulate_parser = actions_parser.add_parser("simulate", help="simulates attack techniques")
-    destroy_parser = actions_parser.add_parser("destroy", help="destroy attack range instances")
-    stop_parser = actions_parser.add_parser("stop", help="stops attack range instances")
-    resume_parser = actions_parser.add_parser("resume", help="resumes previously stopped attack range instances")
-    packer_parser = actions_parser.add_parser("packer", help="create golden images")
+    actions_parser = parser.add_subparsers(
+        title="attack Range actions", dest="action")
+    configure_parser = actions_parser.add_parser(
+        "configure", help="configure a new attack range")
+    build_parser = actions_parser.add_parser(
+        "build", help="builds attack range instances")
+    simulate_parser = actions_parser.add_parser(
+        "simulate", help="simulates attack techniques")
+    destroy_parser = actions_parser.add_parser(
+        "destroy", help="destroy attack range instances")
+    stop_parser = actions_parser.add_parser(
+        "stop", help="stops attack range instances")
+    resume_parser = actions_parser.add_parser(
+        "resume", help="resumes previously stopped attack range instances")
+    packer_parser = actions_parser.add_parser(
+        "packer", help="create golden images")
     show_parser = actions_parser.add_parser("show", help="list machines")
-    dump_parser = actions_parser.add_parser("dump", help="dump locally logs from attack range instances")
-    replay_parser = actions_parser.add_parser("replay", help="replay dumps into the splunk server")
-    create_remote_backend_parser = actions_parser.add_parser("create_remote_backend", help="Create a Remote Backend")
-    delete_remote_backend_parser = actions_parser.add_parser("delete_remote_backend", help="Delete a Remote Backend")
-    init_remote_backend_parser = actions_parser.add_parser("init_remote_backend", help="Init a Remote Backend")
+    dump_parser = actions_parser.add_parser(
+        "dump", help="dump locally logs from attack range instances")
+    replay_parser = actions_parser.add_parser(
+        "replay", help="replay dumps into the splunk server")
+    create_remote_backend_parser = actions_parser.add_parser(
+        "create_remote_backend", help="Create a Remote Backend")
+    delete_remote_backend_parser = actions_parser.add_parser(
+        "delete_remote_backend", help="Delete a Remote Backend")
+    init_remote_backend_parser = actions_parser.add_parser(
+        "init_remote_backend", help="Init a Remote Backend")
 
     # Build arguments
     build_parser.set_defaults(func=build)
@@ -157,20 +194,22 @@ def main(args):
 
     # Stop arguments
     stop_parser.set_defaults(func=stop)
-    stop_parser.add_argument("--instance_ids", required=False, type=str, help="comma-separated list of instance IDs to stop")
+    stop_parser.add_argument("--instance_ids", required=False,
+                             type=str, help="comma-separated list of instance IDs to stop")
 
     # Resume arguments
     resume_parser.set_defaults(func=resume)
-    resume_parser.add_argument("--instance_ids", required=False, type=str, help="comma-separated list of instance IDs to resume")
+    resume_parser.add_argument("--instance_ids", required=False,
+                               type=str, help="comma-separated list of instance IDs to resume")
 
     # Packer agruments
     packer_parser.add_argument("-in", "--image_name", required=True, type=str,
-                                    help="provide image name such as splunk, linux, windows-2016, windows-2019, nginx, windows-10, windows-11")
+                               help="provide image name such as splunk, linux, windows-2016, windows-2019, nginx, windows-10, windows-11")
     packer_parser.set_defaults(func=packer)
 
     # Configure arguments
     configure_parser.add_argument("-c", "--config", required=False, type=str, default='attack_range.yml',
-                                    help="provide path to write configuration to")
+                                  help="provide path to write configuration to")
     configure_parser.set_defaults(func=configure)
 
     # Simulation arguments
@@ -188,7 +227,7 @@ def main(args):
 
     # Dump  Arguments
     dump_parser.add_argument("-fn", "--file_name", required=True,
-                               help="file name of the attack_data")
+                             help="file name of the attack_data")
     dump_parser.add_argument("--search", required=True,
                              help="splunk search to export")
     dump_parser.add_argument("--earliest", required=True,
@@ -201,11 +240,11 @@ def main(args):
     replay_parser.add_argument("-fn", "--file_name", required=True,
                                help="file name of the attack_data")
     replay_parser.add_argument("--source", required=True,
-                        help="source of replayed data")
+                               help="source of replayed data")
     replay_parser.add_argument("--sourcetype", required=True,
-                        help="sourcetype of replayed data")
+                               help="sourcetype of replayed data")
     replay_parser.add_argument("--index", required=False, default="test",
-                        help="index of replayed data")
+                               help="index of replayed data")
     replay_parser.set_defaults(func=replay)
 
     # Show arguments
@@ -213,17 +252,17 @@ def main(args):
 
     # Create Remote Backend
     create_remote_backend_parser.add_argument("-bn", "--backend_name", required=True,
-                               help="name of the remote backend")
+                                              help="name of the remote backend")
     create_remote_backend_parser.set_defaults(func=create_remote_backend)
 
     # Delete Remote Backend
     delete_remote_backend_parser.add_argument("-bn", "--backend_name", required=True,
-                               help="name of the remote backend")
+                                              help="name of the remote backend")
     delete_remote_backend_parser.set_defaults(func=delete_remote_backend)
-    
+
     # Init Remote Backend
     init_remote_backend_parser.add_argument("-bn", "--backend_name", required=True,
-                               help="name of the remote backend")
+                                            help="name of the remote backend")
     init_remote_backend_parser.set_defaults(func=init_remote_backend)
 
     # # parse them

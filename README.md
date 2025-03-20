@@ -37,6 +37,8 @@ python attack_range.py configure
 
 To install directly on Linux, or MacOS follow [these](https://attack-range.readthedocs.io/en/latest/Attack_Range_AWS.html#) instructions.
 
+If deploying in AWS, you may need to press [this button](https://console.aws.amazon.com/servicequotas/home/services/vpc/quotas/L-2AFB9258) and request a quota increase to 16 security groups per network interface.
+
 ## Architecture 🏯
 ![Logical Diagram](docs/attack_range_architecture.png)
 

@@ -7,7 +7,7 @@ data "aws_ami" "latest-centos" {
 
   filter {
     name   = "name"
-    values = ["RHEL-8.9.0_HVM-20240327-x86_64-4-Hourly2-GP3"]
+    values = ["RHEL-8.9.0_HVM*"]
   }
 
   filter {

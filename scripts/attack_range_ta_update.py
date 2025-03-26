@@ -67,7 +67,9 @@ for data_source in data_sources:
                         splunk_app = SplunkApp(app_uid=uid)
 
                         # Create the new filename based on the specified pattern
-                        app_filename_base = splunk_app.app_name_id
+                        app_filename_base = splunk_app.app_title.lower().replace(
+                            " ", "-"
+                        )
                         version_without_dots = splunk_app.latest_version.replace(
                             ".", ""
                         )

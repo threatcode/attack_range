@@ -67,15 +67,11 @@ for data_source in data_sources:
                         splunk_app = SplunkApp(app_uid=uid)
 
                         # Create the new filename based on the specified pattern
-                        app_filename_base = splunk_app.app_title.lower().replace(
-                            " ", "-"
-                        )
+                        app_filename_base = splunk_app.app_name_id
                         version_without_dots = splunk_app.latest_version.replace(
                             ".", ""
                         )
                         app_filename = f"{app_filename_base}_{version_without_dots}.tgz"
-                        print(f"Splunk app name: {splunk_app.app_title}")
-                        print(f"Splunk app name: {splunk_app.app_name_id}")
                         s3_key = app_filename
 
                         # Check if file exists in S3 bucket
@@ -101,9 +97,9 @@ for data_source in data_sources:
                             )
 
                             # Upload to S3
-                            # s3_client.upload_file(full_app_path, bucket_name, s3_key)
-                            # print(f"Uploaded {s3_key} to S3 bucket {bucket_name}")
-                            # uploaded_apps.append(s3_key)
+                            s3_client.upload_file(full_app_path, bucket_name, s3_key)
+                            print(f"Uploaded {s3_key} to S3 bucket {bucket_name}")
+                            uploaded_apps.append(s3_key)
 
                             # Remove the local file after upload
                             os.remove(full_app_path)

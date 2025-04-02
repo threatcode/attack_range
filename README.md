@@ -9,7 +9,7 @@
         <img src="https://img.shields.io/github/stars/splunk/attack_range?style=social" /></a>
 </p>
 
-> ⚠️ **Important:** After careful consideration, we have decided to deprecate the local deployment in Attack Range due to ongoing challenges with VirtualBox and Vagrant. We will concentrate our development efforts on the cloud providers AWS, Azure, and GCP (coming soon). For local cyber range needs, we recommend using Ludus along with the Attack Range environment it offers.
+> ⚠️ **Important:** After careful consideration, we have decided to deprecate the local deployment in Attack Range due to ongoing challenges with VirtualBox and Vagrant. We will concentrate our development efforts on the cloud providers AWS, Azure, and GCP (coming soon). For local cyber range needs, we recommend using [Ludus](https://docs.ludus.cloud/) along with the Attack Range environment it offers.
 
 # Splunk Attack Range ⚔️
 ![Attack Range Log](docs/attack_range.png)

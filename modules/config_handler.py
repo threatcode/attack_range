@@ -22,6 +22,7 @@ class ConfigHandler:
             "general",
             "aws",
             "azure",
+            "gcp",
             "splunk_server",
             "phantom_server",
             "kali_server",
@@ -29,7 +30,6 @@ class ConfigHandler:
             "simulation",
             "zeek_server",
             "snort_server",
-            "caldera_server",
         ]
 
         for parent_key in parent_keys:
@@ -149,11 +149,4 @@ class ConfigHandler:
             print(
                 "ERROR: You can not use a phantom server or bring your own phantom when you use a bring your own splunk."
             )
-            sys.exit(1)
-
-        if (
-            config["caldera_server"]["caldera_server"] == "1"
-            and config["general"]["cloud_provider"] == "azure"
-        ):
-            print("ERROR: Caldera Server not supported in Azure.")
             sys.exit(1)

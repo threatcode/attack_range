@@ -202,7 +202,7 @@ starting configuration for AT-ST mech walker
             "type": "select",
             "message": "select cloud provider",
             "name": "provider",
-            "choices": ["aws", "azure", "local"],
+            "choices": ["aws", "azure"],
             "default": "aws",
         },
         {
@@ -621,7 +621,7 @@ starting configuration for AT-ST mech walker
         if answers["snort_server"]:
             configuration["snort_server"] = dict()
             configuration["snort_server"]["snort_server"] = "1"
-        
+
         if answers["caldera_server"]:
             configuration["caldera_server"] = dict()
             configuration["caldera_server"]["caldera_server"] = "1"

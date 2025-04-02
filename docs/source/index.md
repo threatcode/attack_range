@@ -13,7 +13,6 @@ The Attack Range is a detection development platform, which solves three main ch
 
 Attack Range AWS <Attack_Range_AWS>
 Attack Range Azure <Attack_Range_Azure>
-Attack Range Local <Attack_Range_Local>
 Attack Range Cloud <Attack_Range_Cloud>
 Control Attack Range <Control_Attack_Range>
 Attack Range Config <Attack_Range_Config>

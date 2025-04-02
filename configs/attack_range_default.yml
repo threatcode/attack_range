@@ -93,10 +93,6 @@ azure:
   event_hub_host_name: "xxx"
 # All these fields are needed to configure the Azure logs. See the chapter Azure Logs in the docs page Attack Range Cloud.
 
-local:
-  provider: "Virtual Box"
-# Attack Range Local used Virtualbox and Vagrant to build the Attack Range.
-
 splunk_server:
 
   install_es: "0"

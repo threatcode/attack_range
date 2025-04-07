@@ -7,19 +7,6 @@
 # -----------------------------------------------------------------------------
 # These outputs can be used for verification or additional configuration steps.
 # -----------------------------------------------------------------------------
-# Output: Linux Service Account Email
-# Provides the email address of the Linux Service Account, if created
-output "linux_sa_email" {
-  description = "The email address of the Linux Service Account"
-  value       = var.linux_sa_email
-}
-
-# Output: Linux Server Roles
-# Lists the roles assigned to the Linux Service Account, if created
-output "linux_sa_roles" {
-  description = "Roles assigned to the Linux Service Account"
-  value       = var.linux_sa_roles
-}
 
 # Output: Names of Linux Server Instances
 # Returns the names of all deployed Linux Server Instances

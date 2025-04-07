@@ -1,4 +1,3 @@
-
 # -----------------------------------------------------------------------------
 # Windows Server Instance Configuration
 # -----------------------------------------------------------------------------
@@ -7,19 +6,26 @@
 # to set up essential configurations for attack-range simulations.
 # -----------------------------------------------------------------------------
 
+# Search for the latest Windows Server image
+data "google_compute_image" "windows_server" {
+  count   = length(var.windows_servers)
+  family  = var.windows_servers[count.index].image
+  project = "windows-cloud"
+}
+
 # Windows Server Instance Configuration
 resource "google_compute_instance" "windows_server" {
   count        = length(var.windows_servers)
   name         = "${var.general.attack_range_name}-windows-server-${var.general.key_name}-${count.index}"
-  machine_type = (var.zeek_server.zeek_server == 1 || var.snort_server.snort_server == 1) ? var.snort_server.machine_type : var.zeek_server.machine_type
+  machine_type = "n2-standard-4"
   zone         = var.gcp.zone
 
   # Boot Disk Configuration
   boot_disk {
     initialize_params {
-      image = var.windows_servers[count.index].image      # Windows Server image ID
-      size  = var.windows_servers[count.index].disk_size  # Disk size in GB
-      type  = var.windows_servers[count.index].disk_type  # Disk type, e.g., "pd-ssd"
+      image = data.google_compute_image.windows_server[count.index].self_link      # Windows Server image ID
+      size  = 50  # Disk size in GB
+      type  = "pd-ssd"  # Disk type, e.g., "pd-ssd"
     }
     auto_delete = true
   }
@@ -28,17 +34,17 @@ resource "google_compute_instance" "windows_server" {
   network_interface {
     network    = var.vpc_network
     subnetwork = var.subnetwork
-    network_ip = "${var.private_cidr_three_octets}.${14 + count.index}"  # Assigns static internal IP
+    network_ip = "10.0.1.${14 + count.index}"
     access_config {                            # Assigns an external NAT IP if available
       nat_ip = length(google_compute_address.windows_ip) > count.index ? google_compute_address.windows_ip[count.index].address : null
     }
   }
 
   # Assign the Windows Service Account to this instance
-    service_account {
-        email  = var.windows_sa_email
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    }
+    # service_account {
+    #     email  = var.windows_sa_email
+    #     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    # }
 
   # Metadata for Windows Startup Script
   # This script configures WinRM, firewall rules, and enables the Administrator account.
@@ -245,7 +251,8 @@ resource "google_compute_instance" "windows_server" {
         "general": ${jsonencode(var.general)},
         "splunk_server": ${jsonencode(var.splunk_server)},
         "simulation": ${jsonencode(var.simulation)},
-        "windows_servers": ${jsonencode(var.windows_servers[count.index])}
+        "windows_servers": ${jsonencode(var.windows_servers[count.index])},
+        "caldera_server": ${jsonencode(var.caldera_server)},
       }
       EOF
     EOT
@@ -253,7 +260,7 @@ resource "google_compute_instance" "windows_server" {
 
   provisioner "local-exec" {
     working_dir = "../ansible"
-    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i '${self.network_interface[0].access_config[0].nat_ip},' windows.yml -e @vars/windows_vars_${count.index}.json -vvv"
+    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i '${self.network_interface[0].access_config[0].nat_ip},' windows.yml -e @vars/windows_vars_${count.index}.json"
   }
 }
 
@@ -263,7 +270,7 @@ resource "google_compute_instance" "windows_server" {
 # Allocates a static external IP for each Windows instance if elastic IPs are enabled.
 # -----------------------------------------------------------------------------
 resource "google_compute_address" "windows_ip" {
-  count  = (var.gcp.use_elastic_ips == "1") ? length(var.windows_servers) : 0
-  name   = "windows-ip-${count.index}"
+  count  = (var.gcp.use_static_ip == "1") ? length(var.windows_servers) : 0
+  name   = "windows-ip-${var.general.key_name}-${var.general.attack_range_name}-${count.index}"
   region = var.gcp.region
 }

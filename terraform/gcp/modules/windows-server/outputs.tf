@@ -9,19 +9,6 @@
 # These outputs can be used for verification or additional configuration steps.
 # -----------------------------------------------------------------------------
 
-# Output: Windows Service Account Email
-# Provides the email address of the Windows Service Account, if created
-output "windows_sa_email" {
-  description = "The email address of the Windows Service Account"
-  value       = var.windows_sa_email
-}
-
-# Output: Windows Server Roles
-# Lists the roles assigned to the Windows Service Account, if created
-output "windows_sa_roles" {
-  description = "Roles assigned to the Windows Service Account"
-  value       = var.windows_sa_roles
-}
 
 # Output the names of the Windows Server instances
 output "windows_server_names" {

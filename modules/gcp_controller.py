@@ -32,33 +32,12 @@ class GCPController(AttackRangeController):
             )
             sys.exit(1)
 
-        backend_path_tmp = os.path.join(
-            os.path.dirname(__file__), "../terraform/gcp/backend.tf.tmp"
-        )
         backend_path = os.path.join(
             os.path.dirname(__file__), "../terraform/gcp/backend.tf"
         )
 
-        if self.config["gcp"]["use_remote_state"] == "1":
-            with open(backend_path_tmp, "r") as file:
-                filedata = file.read()
-            filedata = filedata.replace("[region]", self.config["gcp"]["region"])
-            filedata = filedata.replace(
-                "[bucket]", self.config["gcp"]["tf_remote_state_s3_bucket"]
-            )
-            filedata = filedata.replace(
-                "[name]", self.config["general"]["attack_range_name"]
-            )
-            filedata = filedata.replace(
-                "[dynamodb_table]",
-                self.config["gcp"]["tf_remote_state_dynamo_db_table"],
-            )
-            with open(backend_path, "w+") as file:
-                file.write(filedata)
-
-        else:
-            if os.path.isfile(backend_path):
-                os.remove(backend_path)
+        if os.path.isfile(backend_path):
+            os.remove(backend_path)
 
         working_dir = os.path.join(os.path.dirname(__file__), "../terraform/gcp")
         self.terraform = Terraform(
@@ -71,18 +50,12 @@ class GCPController(AttackRangeController):
         for i in range(len(self.config["windows_servers"])):
             image_name = self.config["windows_servers"][i]["windows_image"]
             if image_name.startswith("windows-server-2016"):
-                self.config["windows_servers"][i][
-                    "windows_ami"
-                ] = "Windows_Server-2016-English-Full-Base-*"
+                self.config["windows_servers"][i]["image"] = "windows-2016"
 
             elif image_name.startswith("windows-server-2019"):
-                self.config["windows_servers"][i][
-                    "windows_ami"
-                ] = "Windows_Server-2019-English-Full-Base-*"
+                self.config["windows_servers"][i]["image"] = "windows-2019"
             elif image_name.startswith("windows-server-2022"):
-                self.config["windows_servers"][i][
-                    "windows_ami"
-                ] = "Windows_Server-2022-English-Full-Base-*"
+                self.config["windows_servers"][i]["image"] = "windows-2022"
             else:
                 self.logger.error("Image " + image_name + " not supported.")
                 sys.exit(1)
@@ -131,7 +104,6 @@ class GCPController(AttackRangeController):
         if instances_ids is None:
             instances = gcp_service.get_all_instances(
                 self.config["general"]["key_name"],
-                self.config["general"]["attack_range_name"],
                 self.config["gcp"]["region"],
             )
         else:
@@ -143,7 +115,7 @@ class GCPController(AttackRangeController):
                 self.config["gcp"]["region"],
             )
         gcp_service.change_instance_state(
-            instances, "stopped", self.logger, self.config["gcp"]["region"]
+            self.config["gcp"]["project_id"], instances, "stopped", self.logger
         )
 
     def resume(self, instances_ids=None) -> None:
@@ -151,7 +123,6 @@ class GCPController(AttackRangeController):
         if instances_ids is None:
             instances = gcp_service.get_all_instances(
                 self.config["general"]["key_name"],
-                self.config["general"]["attack_range_name"],
                 self.config["gcp"]["region"],
             )
         else:
@@ -163,7 +134,7 @@ class GCPController(AttackRangeController):
                 self.config["gcp"]["region"],
             )
         gcp_service.change_instance_state(
-            instances, "running", self.logger, self.config["gcp"]["region"]
+            self.config["gcp"]["project_id"], instances, "running", self.logger
         )
 
     def simulate(self, engine, target, technique, playbook) -> None:
@@ -179,7 +150,6 @@ class GCPController(AttackRangeController):
         self.logger.info("[action] > show\n")
         instances = gcp_service.get_all_instances(
             self.config["general"]["key_name"],
-            self.config["general"]["attack_range_name"],
             self.config["gcp"]["region"],
         )
         response = []
@@ -187,24 +157,21 @@ class GCPController(AttackRangeController):
         instances_running = False
         splunk_ip = ""
         for instance in instances:
-            if instance["State"]["Name"] == "running":
+            if instance.status == "RUNNING":
                 instances_running = True
-                response.append(
-                    [
-                        instance["Tags"][0]["Value"],
-                        instance["State"]["Name"],
-                        instance["NetworkInterfaces"][0]["Association"]["PublicIp"],
-                        instance["InstanceId"],
-                    ]
+                public_ip = (
+                    instance.network_interfaces[0].access_configs[0].nat_i_p
+                    if instance.network_interfaces[0].access_configs
+                    else "N/A"
                 )
-                instance_name = instance["Tags"][0]["Value"]
-                if instance_name.startswith("ar-splunk"):
-                    splunk_ip = instance["NetworkInterfaces"][0]["Association"][
-                        "PublicIp"
-                    ]
+                response.append(
+                    [instance.name, instance.status, public_ip, str(instance.id)]
+                )
+                if instance.name.startswith("ar-splunk"):
+                    splunk_ip = public_ip
                     messages.append(
                         "\nAccess Guacamole via:\n\tWeb > http://"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + ":8080/guacamole"
                         + "\n\tusername: Admin \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
@@ -212,130 +179,111 @@ class GCPController(AttackRangeController):
                     if self.config["splunk_server"]["install_es"] == "1":
                         messages.append(
                             "\nAccess Splunk via:\n\tWeb > https://"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + ":8000\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                     else:
                         messages.append(
                             "\nAccess Splunk via:\n\tWeb > http://"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + ":8000\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
-                elif instance_name.startswith("ar-phantom"):
+                elif instance.name.startswith("ar-phantom"):
                     if (
                         "splunk_soar-unpriv-6"
                         in self.config["phantom_server"]["phantom_app"]
                     ):
                         messages.append(
                             "\nAccess Phantom via:\n\tWeb > https://"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " centos@"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + "\n\tusername: soar_local_admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                     else:
                         messages.append(
                             "\nAccess Phantom via:\n\tWeb > https://"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " centos@"
-                            + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
+                            + public_ip
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
-                elif instance_name.startswith("ar-win"):
+                elif instance.name.startswith("ar-win"):
                     messages.append(
                         "\nAccess Windows via:\n\tRDP > rdp://"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + ":3389\n\tusername: Administrator \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
-                elif instance_name.startswith("ar-linux"):
+                elif instance.name.startswith("ar-linux"):
                     messages.append(
                         "\nAccess Linux via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
-                elif instance_name.startswith("ar-kali"):
+                elif instance.name.startswith("ar-kali"):
                     messages.append(
                         "\nAccess Kali via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " kali@"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + "\n\tusername: kali \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
-                elif instance_name.startswith("ar-nginx"):
+                elif instance.name.startswith("ar-nginx"):
                     messages.append(
                         "\nAccess Nginx Web Proxy via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + "\n\tusername: kali \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
-                elif instance_name.startswith("ar-zeek"):
+                elif instance.name.startswith("ar-zeek"):
                     messages.append(
                         "\nAccess Zeek via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
-                elif instance_name.startswith("ar-snort"):
+                elif instance.name.startswith("ar-snort"):
                     messages.append(
                         "\nAccess Snort via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
+                        + public_ip
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
             else:
-                response.append(
-                    [instance["Tags"][0]["Value"], instance["State"]["Name"]]
-                )
+                response.append([instance.name, instance.status, str(instance.id)])
 
         print()
         print("Status Virtual Machines\n")
         if len(response) > 0:
-
             if instances_running:
                 print(
                     tabulate(

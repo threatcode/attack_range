@@ -9,11 +9,11 @@ variable "subnetwork" { }
 
 variable "simulation" { }
 
-variable "service_accounts" { }
+# variable "service_accounts" { }
 
-variable "splunk_sa_email" { }
+# variable "splunk_sa_email" { }
 
-variable "splunk_sa_roles" { }
+# variable "splunk_sa_roles" { }
 
 variable "windows_servers" { }
 

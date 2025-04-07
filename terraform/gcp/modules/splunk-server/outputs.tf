@@ -12,17 +12,17 @@
 
 # Output: Splunk Service Account Email
 # Provides the email address of the Splunk Service Account, if created
-output "splunk_sa_email" {
-  description = "The email address of the Splunk Service Account"
-  value       = var.splunk_sa_email
-}
+# output "splunk_sa_email" {
+#   description = "The email address of the Splunk Service Account"
+#   value       = var.splunk_sa_email
+# }
 
-# Output: Splunk Server Roles
-# Lists the roles assigned to the Splunk Service Account, if created
-output "splunk_sa_roles" {
-  description = "Roles assigned to the Splunk Service Account"
-  value       = var.splunk_sa_roles
-}
+# # Output: Splunk Server Roles
+# # Lists the roles assigned to the Splunk Service Account, if created
+# output "splunk_sa_roles" {
+#   description = "Roles assigned to the Splunk Service Account"
+#   value       = var.splunk_sa_roles
+# }
 
 # Output for the Public IP of the Splunk Server
 output "splunk_server_ip" {

@@ -3,17 +3,17 @@ variable "general" { }
 
 variable "gcp" { }
 
-variable "cidrs" { }
+# variable "cidrs" { }
 
 variable "vpc_network" { }
 
 variable "subnetwork" { }
 
-variable "service_accounts" { }
+# variable "service_accounts" { }
 
-variable "linux_sa_email" { }
+# variable "linux_sa_email" { }
 
-variable "linux_sa_roles" { }
+# variable "linux_sa_roles" { }
 
 variable "simulation" { }
 
@@ -24,3 +24,5 @@ variable "splunk_server" { }
 variable "zeek_server" { }
 
 variable "snort_server" { }
+
+variable "caldera_server" { }

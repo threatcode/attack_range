@@ -40,10 +40,10 @@ resource "google_compute_instance" "zeek_sensor" {
   }
 
   # Assign the Zeek Service Account to this instance
-    service_account {
-        email  = var.zeek_sa_email
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    }
+    # service_account {
+    #     email  = var.zeek_sa_email
+    #     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    # }
 
   # SSH key metadata for access
   metadata = {

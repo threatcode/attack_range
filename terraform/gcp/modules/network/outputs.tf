@@ -17,10 +17,10 @@ output "vpc_public_subnet_id" {
 }
 
 # Output the ID of the private subnet within the VPC
-output "vpc_private_subnet_id" {
-  description = "The ID of the private subnet in the VPC"
-  value       = module.vpc.subnets_ids[1]
-}
+# output "vpc_private_subnet_id" {
+#   description = "The ID of the private subnet in the VPC"
+#   value       = module.vpc.subnets_ids[1]
+# }
 
 # Output the unique identifier for the VPC network
 output "vpc_network_id" {
@@ -46,6 +46,6 @@ output "splunk_server_ip" {
 }
 
 # Output the first 3 octects value of the private cidr block
-output "private_three_octets" {
-  value = local.private_cidr_three_octets
-}
+# output "private_three_octets" {
+#   value = local.private_cidr_three_octets
+# }

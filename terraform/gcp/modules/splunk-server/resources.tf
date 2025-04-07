@@ -8,16 +8,16 @@
 
 # Splunk Server GCP Instance
 resource "google_compute_instance" "splunk_server" {
-    count        = var.splunk_server.splunk_server == 1 ? 1 : 0
+    count        = (var.splunk_server.byo_splunk == "0") ? 1 : 0
     name         = "${var.general.attack_range_name}-splunk-server-${var.general.key_name}"
-    machine_type = var.splunk_server.machine_type
+    machine_type = "e2-standard-4"
     zone         = var.gcp.zone
 
     # Assign the Splunk Service Account to this instance
-    service_account {
-        email  = var.splunk_sa_email
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    }
+    # service_account {
+    #     email  = var.splunk_sa_email
+    #     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    # }
 
     # SSH Metadata Configuration
     metadata = {
@@ -27,9 +27,9 @@ resource "google_compute_instance" "splunk_server" {
     # Boot Disk Configuration
     boot_disk {
         initialize_params {
-            image = var.splunk_server.image            # OS image for the instance, e.g., Ubuntu
-            size  = var.splunk_server.disk_size        # Disk size in GB
-            type  = var.splunk_server.disk_type        # Disk type, e.g., pd-ssd
+            image = "ubuntu-2204-lts"            # OS image for the instance, e.g., Ubuntu
+            size  = 120        # Disk size in GB
+            type  = "pd-standard"        # Disk type, e.g., pd-ssd
         }
         auto_delete = true                             # Automatically delete disk on instance termination
     }
@@ -38,7 +38,7 @@ resource "google_compute_instance" "splunk_server" {
     network_interface {
         network     = var.vpc_network                  # VPC network name
         subnetwork  = var.subnetwork                   # Subnetwork name
-        network_ip  = var.splunk_server.network_ip     # Static internal IP (optional)
+        network_ip  = "10.0.1.12"    # Static internal IP (optional)
         access_config {                                # External IP configuration
             # nat_ip = google_compute_address.splunk_ip.address
             nat_ip = length(google_compute_address.splunk_ip) > count.index ? google_compute_address.splunk_ip[count.index].address : null
@@ -111,7 +111,7 @@ resource "google_compute_instance" "splunk_server" {
 # Creates a static IP address to be assigned to the Splunk server instance.
 # -----------------------------------------------------------------------------
 resource "google_compute_address" "splunk_ip" {
-    count  = (var.splunk_server.splunk_server == 1 && var.gcp.use_elastic_ips == "1") ? 1 : 0
+    count  = (var.splunk_server.byo_splunk == "0" && var.gcp.use_static_ip == "1") ? 1 : 0
     name   = "splunk-ip-${var.general.key_name}-${count.index}"
     region = var.gcp.region
 }

@@ -1,11 +1,10 @@
-
 # Locals variables
 # Creates a locals variables to obtain the first three octets of the private subnet.
 # -----------------------------------------------------------------------------
-locals {
-  private_cidr_prefix = cidrsubnet(var.cidrs["cidr_blocks"][1], 0, 0) #Get private subnet
-  private_cidr_three_octets = join(".", slice(split(".", local.private_cidr_prefix), 0, 3))
-}
+# locals {
+#   private_cidr_prefix = cidrsubnet(var.cidrs["cidr_blocks"][1], 0, 0) #Get private subnet
+#   private_cidr_three_octets = join(".", slice(split(".", local.private_cidr_prefix), 0, 3))
+# }
 
 # -----------------------------------------------------------------------------
 # VPC Module Configuration
@@ -20,16 +19,10 @@ module "vpc" {
   network_name           = "vpc-${var.general.key_name}-${var.general.attack_range_name}"
   auto_create_subnetworks = false
 
-  # Define public and private subnets with CIDR blocks
   subnets = [
     {
       subnet_name   = "public-subnet"
       subnet_ip     = var.cidrs.cidr_blocks[0]  # Public subnet
-      subnet_region = var.gcp.region
-    },
-    {
-      subnet_name   = "private-subnet"
-      subnet_ip     = var.cidrs.cidr_blocks[1]  # Private subnet
       subnet_region = var.gcp.region
     }
   ]
@@ -185,4 +178,16 @@ resource "google_compute_firewall" "default_egress" {
 
   direction         = "EGRESS"
   destination_ranges = ["0.0.0.0/0"]
+}
+
+resource "google_compute_firewall" "allow_internal_communication" {
+    description = "Allow all internal communication within the 10.0.1.0/24 subnet"
+    name    = "allow-internal-communication"
+    network = module.vpc.network_name
+
+    allow {
+        protocol = "all"
+    }
+
+    source_ranges = ["10.0.1.0/24"]
 }

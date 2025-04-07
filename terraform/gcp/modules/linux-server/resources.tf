@@ -9,16 +9,16 @@ resource "google_compute_instance" "linux_server" {
   # Define instance count based on the number of entries in the linux_servers variable
   count        = length(var.linux_servers)
   name         = "${var.general.attack_range_name}-linux-server-${var.general.key_name}-${count.index}"
-  machine_type = (var.zeek_server.zeek_server == 1 || var.snort_server.snort_server == 1) ? var.zeek_server.machine_type : var.snort_server.machine_type
+  machine_type = "n2-standard-4"
   zone         = var.gcp.zone   # Specify the GCP zone for deployment
 
   # Boot Disk Configuration
   # Set up the primary boot disk with configurable image, size, and type
   boot_disk {
     initialize_params {
-      image = var.linux_servers[count.index].image        # OS image ID (e.g., "ubuntu-2204-lts")
-      size  = var.linux_servers[count.index].disk_size    # Disk size in GB
-      type  = var.linux_servers[count.index].disk_type    # Disk type (e.g., "pd-balanced")
+      image = "ubuntu-2204-lts"    # OS image ID (e.g., "ubuntu-2204-lts")
+      size  = 30   # Disk size in GB
+      type  = "pd-standard"    # Disk type (e.g., "pd-balanced")
     }
     auto_delete = true  # Automatically delete the boot disk upon instance deletion
   }
@@ -28,6 +28,7 @@ resource "google_compute_instance" "linux_server" {
   network_interface {
     network    = var.vpc_network
     subnetwork = var.subnetwork
+    network_ip = "10.0.1.${21 + count.index}"
     access_config {    # Assigns an external IP address (NAT)
       nat_ip = length(google_compute_address.linux_server_ip) > count.index ? google_compute_address.linux_server_ip[count.index].address : null
     }
@@ -39,10 +40,10 @@ resource "google_compute_instance" "linux_server" {
   }
 
   # Assign the Linux Service Account to this instance
-    service_account {
-        email  = var.linux_sa_email
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    }
+    # service_account {
+    #     email  = var.linux_sa_email
+    #     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    # }
 
   # SSH Key Metadata Configuration
   # Add SSH keys for instance access
@@ -82,7 +83,8 @@ resource "google_compute_instance" "linux_server" {
         "general": ${jsonencode(var.general)},
         "splunk_server": ${jsonencode(var.splunk_server)},
         "linux_servers": ${jsonencode(var.linux_servers[count.index])},
-        "simulation": ${jsonencode(var.simulation)}
+        "simulation": ${jsonencode(var.simulation)},
+        "caldera_server": ${jsonencode(var.caldera_server)},
       }
       EOF
     EOT
@@ -92,7 +94,7 @@ resource "google_compute_instance" "linux_server" {
   # Run the Ansible playbook to configure the instance with the specified variables
   provisioner "local-exec" {
     working_dir = "../ansible"
-    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u ubuntu --private-key '${var.gcp.private_key_path}' -i '${self.network_interface[0].access_config[0].nat_ip},' linux_server.yml -e @vars/linux_vars_${count.index}.json -vvv"
+    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u ubuntu --private-key '${var.gcp.private_key_path}' -i '${self.network_interface[0].access_config[0].nat_ip},' linux_server.yml -e @vars/linux_vars_${count.index}.json"
   }
 }
 
@@ -102,7 +104,7 @@ resource "google_compute_instance" "linux_server" {
 # -----------------------------------------------------------------------------
 
 resource "google_compute_address" "linux_server_ip" {
-  count  = (var.gcp.use_elastic_ips == "1") ? length(var.linux_servers) : 0
+  count  = (var.gcp.use_static_ip == "1") ? length(var.linux_servers) : 0
   name   = "linux-server-ip-${count.index}"
   region = var.gcp.region   # Specify the region for the IP allocation
 }

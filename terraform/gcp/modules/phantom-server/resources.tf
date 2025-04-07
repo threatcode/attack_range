@@ -40,10 +40,10 @@ resource "google_compute_instance" "phantom_server" {
   }
 
   # Assign the Phantom Service Account to this instance
-    service_account {
-        email  = var.phantom_sa_email
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    }
+    # service_account {
+    #     email  = var.phantom_sa_email
+    #     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+    # }
 
   # Metadata for SSH access setup
   metadata = {

@@ -46,9 +46,9 @@ resource "google_compute_instance" "splunk_server" {
     }
 
     # Use local-exec provisioner to clean known_hosts
-    provisioner "local-exec" {
-        command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
-    }
+    # provisioner "local-exec" {
+    #     command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
+    # }
 
     # Tagging and Labeling for Organization
     tags = ["gcp-infrastructure", "splunk-server", "attack-range"]

@@ -35,9 +35,9 @@ resource "google_compute_instance" "snort_sensor" {
   }
 
   # Use local-exec provisioner to clean known_hosts
-  provisioner "local-exec" {
-    command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
-  }
+  # provisioner "local-exec" {
+  #   command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
+  # }
 
   # SSH key metadata for user access
   metadata = {

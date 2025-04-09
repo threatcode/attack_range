@@ -37,7 +37,11 @@ resource "google_compute_instance" "nginx_server" {
 
   # Use local-exec provisioner to clean known_hosts
   provisioner "local-exec" {
-    command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
+      command = <<-EOT
+          mkdir -p ~/.ssh
+          touch ~/.ssh/known_hosts
+          ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}
+      EOT
   }
 
   # Metadata for SSH and Custom Commands

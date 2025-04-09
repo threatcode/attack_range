@@ -466,6 +466,8 @@ class ConfigurationManager:
                 "message": "Shall we include Splunk SOAR",
                 "name": "phantom",
                 "default": False,
+                "when": lambda answers: self.configuration["general"]["cloud_provider"]
+                != "gcp",
             },
             {
                 "type": "text",

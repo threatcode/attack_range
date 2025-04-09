@@ -64,6 +64,7 @@
       - libunwind-dev
       - libfl-dev
       - unzip
+      - libpcre2-dev
     state: present
     update_cache: yes
   become: yes

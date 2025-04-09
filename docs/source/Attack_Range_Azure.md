@@ -17,12 +17,6 @@ brew install terraform
 cd terraform/azure && terraform init && cd ../..
 ````
 
-Install Packer:
-````bash
-brew tap hashicorp/tap
-brew install hashicorp/tap/packer
-````
-
 Install the Azure CLI:
 ````bash
 brew install azure-cli
@@ -47,7 +41,7 @@ Once the configuration is complete, you can proceed to build and control your ra
 Install the required packages:
 ````bash
 apt-get update
-apt-get install -y python3.8 git unzip python3-pip curl
+apt-get install -y python3.10 git unzip python3-pip curl
 ````
 
 Install and configure Terraform:

@@ -252,7 +252,7 @@ class AwsController(AttackRangeController):
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["aws"]["private_key_path"]
-                            + " ec2-user@"
+                            + " centos@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
@@ -268,7 +268,7 @@ class AwsController(AttackRangeController):
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["aws"]["private_key_path"]
-                            + " ec2-user@"
+                            + " centos@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
@@ -306,8 +306,6 @@ class AwsController(AttackRangeController):
                         + self.config["aws"]["private_key_path"]
                         + " ubuntu@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + "\n\tusername: kali \n\tpassword: "
-                        + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-zeek"):
                     messages.append(
@@ -326,20 +324,6 @@ class AwsController(AttackRangeController):
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
-                    )
-                elif instance_name.startswith("ar-caldera"):
-                    messages.append(
-                        "\nAccess Caldera via:\n\tWeb > http://"
-                        + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + ":8888"
-                        + "\n\tusername: red \n\tpassword: "
-                        + self.config["general"]["attack_range_password"]
-                        + "\n\tSSH > ssh -i"
-                        + self.config["aws"]["private_key_path"]
-                        + " admin@"
-                        + instance["NetworkInterfaces"][0]["Association"][
-                                "PublicIp"
-                            ]
                     )
             else:
                 response.append(

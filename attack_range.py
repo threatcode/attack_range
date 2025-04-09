@@ -55,27 +55,14 @@ By: Splunk Threat Research Team [STRT] - research@splunk.com
 
     if config["general"]["cloud_provider"] == "aws":
         config.pop("azure")
-        config.pop("local")
-        config.pop("gcp")
         controller = AwsController(config)
     elif config["general"]["cloud_provider"] == "azure":
         config.pop("aws")
-        config.pop("local")
-        config.pop("gcp")
         controller = AzureController(config)
     elif config["general"]["cloud_provider"] == "gcp":
         config.pop("aws")
-        config.pop("local")
         config.pop("azure")
         controller = GCPController(config)
-    elif config["general"]["cloud_provider"] == "local":
-        from modules.vagrant_controller import VagrantController
-
-        config.pop("azure")
-        config.pop("aws")
-        config.pop("gcp")
-        controller = VagrantController(config)
-
     return controller
 
 
@@ -122,11 +109,6 @@ def resume(args):
         else None
     )
     controller.resume(instance_ids)
-
-
-def packer(args):
-    controller = init(args)
-    controller.packer(args.image_name)
 
 
 def configure(args):
@@ -231,16 +213,6 @@ def main(args):
         type=str,
         help="comma-separated list of instance IDs to resume",
     )
-
-    # Packer agruments
-    packer_parser.add_argument(
-        "-in",
-        "--image_name",
-        required=True,
-        type=str,
-        help="provide image name such as splunk, linux, windows-2016, windows-2019, nginx, windows-10, windows-11",
-    )
-    packer_parser.set_defaults(func=packer)
 
     # Configure arguments
     configure_parser.add_argument(

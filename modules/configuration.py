@@ -219,7 +219,7 @@ class ConfigurationManager:
                 "message": "Generate a new ssh key pair for this range",
                 "name": "new_key_pair",
                 "default": True,
-                "when": lambda answers: not answers.get("reuse_keys", True),
+                "when": lambda answers: not answers.get("reuse_keys", False),
             },
         ]
 

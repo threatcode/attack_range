@@ -257,8 +257,8 @@ class GCPController(AttackRangeController):
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
                         + public_ip
-                        + "\n\tusername: kali \n\tpassword: "
-                        + self.config["general"]["attack_range_password"]
+                        + "\n\tWeb > http://"
+                        + public_ip
                     )
                 elif instance.name.startswith("ar-zeek"):
                     messages.append(
@@ -324,7 +324,6 @@ class GCPController(AttackRangeController):
             gcp_service.get_single_instance_public_ip(
                 splunk_instance,
                 self.config["general"]["key_name"],
-                self.config["general"]["attack_range_name"],
                 self.config["gcp"]["region"],
             ),
             s=dump_search,
@@ -358,7 +357,6 @@ class GCPController(AttackRangeController):
         splunk_ip = gcp_service.get_single_instance_public_ip(
             splunk_instance,
             self.config["general"]["key_name"],
-            self.config["general"]["attack_range_name"],
             self.config["gcp"]["region"],
         )
         cmdline = "-i %s, -u %s" % (splunk_ip, ansible_vars["ansible_user"])
@@ -371,105 +369,13 @@ class GCPController(AttackRangeController):
         )
 
     def create_remote_backend(self, backend_name) -> None:
-        if not gcp_service.check_gcs_bucket(backend_name):
-            self.logger.info(
-                "Can not access remote S3 bucket with name " + backend_name
-            )
-            self.logger.info("Try to create a S3 for remote backend.")
-            gcp_service.create_s3_bucket(
-                backend_name, self.config["gcp"]["region"], self.logger
-            )
-
-        # create DynamoDB
-        gcp_service.create_bigtable_instance_and_table(
-            backend_name, self.config["gcp"]["region"], self.logger
-        )
-
-        self.config["gcp"]["private_key_path"] = str(
-            Path(backend_name + ".key").resolve()
-        )
-        self.config["general"]["key_name"] = backend_name
-
-        # privat key in secrets manager
-        if not gcp_service.check_secret_exists(backend_name):
-            key_material = gcp_service.create_key_pair(
-                backend_name, self.config["gcp"]["region"], self.logger
-            )
-            gcp_service.create_secret(
-                backend_name, key_material, self.config, self.logger
-            )
-
-        with open(
-            os.path.join(os.path.dirname(__file__), "../attack_range.yml"), "w"
-        ) as outfile:
-            yaml.dump(self.config, outfile, default_flow_style=False, sort_keys=False)
-
-        # write versions.tf
-        j2_env = Environment(
-            loader=FileSystemLoader(
-                os.path.join(os.path.dirname(__file__), "../terraform/gcp")
-            ),
-            trim_blocks=True,
-        )
-        template = j2_env.get_template("versions.tf.j2")
-        output = template.render(
-            backend_name=backend_name, region=self.config["gcp"]["region"]
-        )
-        with open("terraform/gcp/versions.tf", "w") as f:
-            output = output.encode("ascii", "ignore").decode("ascii")
-            f.write(output)
+        self.logger.error("Command not supported with gcp provider.")
+        pass
 
     def delete_remote_backend(self, backend_name) -> None:
-        gcp_service.delete_gcs_bucket(
-            backend_name, self.config["gcp"]["region"], self.logger
-        )
-        gcp_service.delete_bigtable_table(
-            backend_name, self.config["gcp"]["region"], self.logger
-        )
-        gcp_service.delete_secret(backend_name, self.logger)
-        gcp_service.delete_key_pair(
-            backend_name, self.config["gcp"]["region"], self.logger
-        )
-        try:
-            os.remove(
-                os.path.join(os.path.dirname(__file__), "../terraform/gcp/versions.tf")
-            )
-        except Exception as e:
-            self.logger.error(e)
-        try:
-            os.remove(
-                os.path.join(os.path.dirname(__file__), "../", backend_name + ".key")
-            )
-        except Exception as e:
-            self.logger.error(e)
+        self.logger.error("Command not supported with gcp provider.")
+        pass
 
     def init_remote_backend(self, backend_name) -> None:
-        if not gcp_service.check_gcs_bucket(backend_name):
-            self.logger.error("Can't find S3 bucket with name " + backend_name)
-            sys.exit(1)
-        if not gcp_service.check_secret_exists(backend_name):
-            self.logger.error("Secret doesn't exist with name " + backend_name)
-            sys.exit(1)
-
-        gcp_service.get_secret_key(backend_name, self.logger)
-        config = gcp_service.get_secret_config(backend_name, self.logger)
-        config["gcp"]["private_key_path"] = str(Path(backend_name + ".key").resolve())
-        with open(
-            os.path.join(os.path.dirname(__file__), "../attack_range.yml"), "w"
-        ) as outfile:
-            yaml.dump(config, outfile, default_flow_style=False, sort_keys=False)
-
-        # write versions.tf
-        j2_env = Environment(
-            loader=FileSystemLoader(
-                os.path.join(os.path.dirname(__file__), "../terraform/gcp")
-            ),
-            trim_blocks=True,
-        )
-        template = j2_env.get_template("versions.tf.j2")
-        output = template.render(
-            backend_name=backend_name, region=self.config["gcp"]["region"]
-        )
-        with open("terraform/gcp/versions.tf", "w") as f:
-            output = output.encode("ascii", "ignore").decode("ascii")
-            f.write(output)
+        self.logger.error("Command not supported with gcp provider.")
+        pass

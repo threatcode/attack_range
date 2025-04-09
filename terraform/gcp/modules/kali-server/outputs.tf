@@ -7,21 +7,6 @@
 # -----------------------------------------------------------------------------
 # These outputs can be used for verification or additional configuration steps.
 # -----------------------------------------------------------------------------
-
-# Output the name of the Kali Linux Service Account
-# This service account is likely used for managing the Kali Server Instance
-output "kali_sa_email" {
-  description = "The email address of the Kali Linux Service Account"
-  value       = var.kali_sa_email 
-}
-
-# Output the roles assigned to the Kali Linux Service Account
-# These roles define the permissions and access levels for the Kali server
-output "kali_sa_roles" {
-  description = "Roles assigned to the Kali Linux Service Account"
-  value       = var.kali_sa_roles
-}
-
 # Output the instance name of the Kali server for easy reference
 output "kali_server_instance_name" {
   description = "Name of the Kali Server Instance for identification in GCP"

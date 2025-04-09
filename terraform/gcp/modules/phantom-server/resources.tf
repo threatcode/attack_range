@@ -1,23 +1,28 @@
-
 # -----------------------------------------------------------------------------
 # Phantom Server Instance Configuration on CentOS 7 in GCP
 # This configuration creates a Phantom server instance in Google Cloud Platform,
 # including network and disk settings, provisioning, and Ansible setup.
 # -----------------------------------------------------------------------------
 
+data "google_compute_image" "phantom_server" {
+  count   = var.phantom_server.phantom_server == 1 ? 1 : 0
+  family  = "rhel-9"
+  project = "rhel-cloud"
+}
+
 # Define the Phantom server instance
 resource "google_compute_instance" "phantom_server" {
   count        = var.phantom_server.phantom_server == 1 ? 1 : 0
   name         = "${var.general.attack_range_name}-phantom-server-${var.general.key_name}"
-  machine_type = var.phantom_server.machine_type  # Machine type for the instance, e.g., "t3.xlarge"
+  machine_type = "e2-standard-4"  # Machine type for the instance, e.g., "t3.xlarge"
   zone         = var.gcp.zone                      # GCP zone where the instance will be launched
 
   # Configure the boot disk with CentOS image, disk size, and type
   boot_disk {
     initialize_params {
-      image = var.phantom_server.image             # CentOS 7 image ID in GCP
-      size  = var.phantom_server.disk_size         # Disk size in GB
-      type  = var.phantom_server.disk_type         # Disk type, e.g., "gp2" equivalent
+      image = data.google_compute_image.phantom_server[count.index].self_link      
+      size  = 40       # Disk size in GB
+      type  = "pd-standard"       # Disk type, e.g., "gp2" equivalent
     }
     auto_delete = true                             # Automatically delete the disk when the instance is deleted
   }
@@ -26,7 +31,7 @@ resource "google_compute_instance" "phantom_server" {
   network_interface {
     network    = var.vpc_network                   # VPC network to associate with the instance
     subnetwork = var.subnetwork                    # Subnetwork within the VPC
-    network_ip = var.phantom_server.network_ip     # Static internal IP if required
+    network_ip = "10.0.1.13"     # Static internal IP if required
 
     # Optional external IP assignment (using Elastic IPs if configured)
     access_config {
@@ -51,11 +56,23 @@ resource "google_compute_instance" "phantom_server" {
   }
   metadata_startup_script = <<-EOT
     #!/bin/bash
-    echo "Additional configuration after SSH key setup"
+    # Ensure SSH directory exists with correct permissions
     mkdir -p /root/.ssh
+    chmod 700 /root/.ssh
+    
+    # Set up authorized_keys with proper permissions
     echo '${file(var.gcp.public_key_path)}' > /root/.ssh/authorized_keys
-    chown -R root:root /root/.ssh
     chmod 600 /root/.ssh/authorized_keys
+    chown -R root:root /root/.ssh
+    
+    # Ensure SSH service is running and enabled
+    systemctl enable sshd
+    systemctl start sshd
+    
+    # Configure SSH daemon to allow root login with key
+    sed -i 's/^#PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+    sed -i 's/^#PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+    systemctl restart sshd
   EOT
 
   # Tags and labels for instance organization and firewall rule association
@@ -76,7 +93,7 @@ resource "google_compute_instance" "phantom_server" {
       # Ensure authorized_keys file exists with correct permissions
       "touch /root/.ssh/authorized_keys && chmod 600 /root/.ssh/authorized_keys",
 
-      # Append the public key only if it doesn’t already exist in authorized_keys
+      # Append the public key only if it doesn't already exist in authorized_keys
       "grep -qxF \"$(cat ${file(var.gcp.public_key_path)})\" /root/.ssh/authorized_keys || echo $(cat ${file(var.gcp.public_key_path)}) >> /root/.ssh/authorized_keys"
     ]
 
@@ -105,13 +122,13 @@ resource "google_compute_instance" "phantom_server" {
   # Local-exec provisioner to run the Ansible playbook for server configuration
   provisioner "local-exec" {
     working_dir = "../ansible"
-    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u root --private-key '${var.gcp.private_key_path}' -i '${self.network_interface[0].access_config[0].nat_ip},' phantom_server.yml -e @vars/phantom_vars.json -vvv"
+    command = "ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -u root --private-key '${var.gcp.private_key_path}' -i '${self.network_interface[0].access_config[0].nat_ip},' phantom_server.yml -e @vars/phantom_vars.json"
   }
 }
 
 # Allocate a static external IP for the Phantom server if configured to use Elastic IPs
 resource "google_compute_address" "phantom_ip" {
-  count  = (var.phantom_server.phantom_server == 1 && var.gcp.use_elastic_ips == "1") ? 1 : 0
+  count  = (var.phantom_server.phantom_server == 1 && var.gcp.use_static_ip== "1") ? 1 : 0
   name   = "phantom-ip-${count.index}"
   region = var.gcp.region                          # Region for IP allocation to align with instance location
 }

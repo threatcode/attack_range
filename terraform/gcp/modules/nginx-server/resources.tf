@@ -7,18 +7,18 @@
 
 # Google Compute Instance for NGINX Server
 resource "google_compute_instance" "nginx_server" {
-  count        = var.nginx_server.nginx_server == 1 ? 1 : 0
+  count        = var.nginx_server.nginx_server == "1" ? 1 : 0
   name         = "${var.general.attack_range_name}-nginx-server-${var.general.key_name}"
-  machine_type = var.nginx_server.machine_type  # Specifies instance type, e.g., "e2-small"
+  machine_type = "e2-small"  # Specifies instance type, e.g., "e2-small"
   zone         = var.gcp.zone                   # Define the desired GCP zone
 
   # Boot Disk Configuration
   # Configures the boot disk with specified image, size, and type
   boot_disk {
     initialize_params {
-      image = var.nginx_server.image  # GCP image ID, e.g., "ubuntu-2004-focal-v20210817"
-      size  = var.nginx_server.disk_size  # Disk size in GB
-      type  = var.nginx_server.disk_type  # Disk type, e.g., "pd-balanced"
+      image = "ubuntu-2204-lts"  # GCP image ID, e.g., "ubuntu-2004-focal-v20210817"
+      size  = 20
+      type  = "pd-standard"
     }
     auto_delete = true
   }
@@ -28,7 +28,7 @@ resource "google_compute_instance" "nginx_server" {
   network_interface {
     network    = var.vpc_network
     subnetwork = var.subnetwork
-    network_ip = var.nginx_server.network_ip  # Static internal IP, if specified
+    network_ip = "10.0.1.31"  # Static internal IP, if specified
     
     access_config {                           # Enables external IP assignment
       nat_ip = length(google_compute_address.nginx_server_ip) > count.index ? google_compute_address.nginx_server_ip[count.index].address : null
@@ -39,12 +39,6 @@ resource "google_compute_instance" "nginx_server" {
   provisioner "local-exec" {
     command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
   }
-
-  # Assign the NGINX Service Account to this instance
-    service_account {
-        email  = var.nginx_sa_email
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-    }
 
   # Metadata for SSH and Custom Commands
   # Adds SSH key metadata for instance access
@@ -99,7 +93,7 @@ resource "google_compute_instance" "nginx_server" {
 # Static External IP Allocation for NGINX Server Instance
 # Provisions a static IP for the NGINX server if elastic IPs are enabled
 resource "google_compute_address" "nginx_server_ip" {
-  count  = (var.nginx_server.nginx_server == 1 && var.gcp.use_elastic_ips == "1") ? 1 : 0
+  count  = (var.nginx_server.nginx_server == "1" && var.gcp.use_static_ip == "1") ? 1 : 0
   name   = "nginx-server-ip-${count.index}"
   region = var.gcp.region
 }

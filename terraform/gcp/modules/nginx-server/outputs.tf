@@ -9,20 +9,6 @@
 # These outputs can be used for verification or additional configuration steps.
 # -----------------------------------------------------------------------------
 
-# Output: Nginx Service Account email
-# Provides the email address of the Nginx Service Account, if created
-output "nginx_sa_email" {
-  description = "The email address of the Nginx Service Account"
-  value       = var.nginx_sa_email
-}
-
-# Output: Nginx Server Roles
-# Lists the roles assigned to the Nginx Service Account, if created
-output "nginx_sa_roles" {
-  description = "Roles assigned to the Nginx Service Account"
-  value       = var.nginx_sa_roles
-}
-
 # Output: NGINX Server Instance Name
 # Provides the name of the NGINX Server Instance for identification.
 output "nginx_server_name" {

@@ -306,8 +306,6 @@ class AwsController(AttackRangeController):
                         + self.config["aws"]["private_key_path"]
                         + " ubuntu@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + "\n\tusername: kali \n\tpassword: "
-                        + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-zeek"):
                     messages.append(

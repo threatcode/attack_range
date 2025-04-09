@@ -42,7 +42,6 @@ module "splunk_server" {
 #   # Network configuration (GCP equivalent of VPC and subnet IDs)
 #   vpc_network          = module.networkModule.vpc_network_id
 #   subnetwork           = module.networkModule.vpc_public_subnet_id
-#   cidrs                = var.cidrs
 
 #   # General configuration
 #   general              = var.general
@@ -56,35 +55,33 @@ module "splunk_server" {
 #   phantom_server       = var.phantom_server # Phantom server configuration
 # }
 
-# # NGINX Server module to deploy and manage an NGINX server.
-# module "nginx_server" {
-#   source               = "./modules/nginx-server"
+# NGINX Server module to deploy and manage an NGINX server.
+module "nginx_server" {
+  source               = "./modules/nginx-server"
 
-#   # Network configuration (GCP equivalent of VPC and subnet IDs)
-#   vpc_network          = module.networkModule.vpc_network_id
-#   subnetwork           = module.networkModule.vpc_public_subnet_id
-#   cidrs                = var.cidrs
+  # Network configuration (GCP equivalent of VPC and subnet IDs)
+  vpc_network          = module.networkModule.vpc_network_id
+  subnetwork           = module.networkModule.vpc_public_subnet_id
 
-#   # General configuration
-#   general              = var.general
-#   gcp                  = var.gcp
-#   # service_accounts     = var.service_accounts
-#   # nginx_sa_email       = module.iam.service_account_emails["nginx"]
-#   # nginx_sa_roles       = module.iam.assigned_roles["nginx"]
+  # General configuration
+  general              = var.general
+  gcp                  = var.gcp
+  # service_accounts     = var.service_accounts
+  # nginx_sa_email       = module.iam.service_account_emails["nginx"]
+  # nginx_sa_roles       = module.iam.assigned_roles["nginx"]
 
-#   # Server instances and dependencies
-#   splunk_server        = var.splunk_server  # Splunk server configuration
-#   nginx_server         = var.nginx_server   # NGINX server configuration
-# }
+  # Server instances and dependencies
+  splunk_server        = var.splunk_server  # Splunk server configuration
+  nginx_server         = var.nginx_server   # NGINX server configuration
+}
 
-# # Kali Server module to deploy Kali Linux for security assessments and network tests.
+# Kali Server module to deploy Kali Linux for security assessments and network tests.
 # module "kali_server" {
 #   source              = "./modules/kali-server"                   # Module source path
 
 #   # Network configuration (GCP equivalent of VPC and subnet IDs)
 #   vpc_network         = module.networkModule.vpc_network_id       # VPC network ID
-#   subnetwork          = module.networkModule.vpc_public_subnet_id # Subnetwork ID
-#   cidrs               = var.cidrs                                 # CIDR blocks for network subnets
+#   subnetwork          = module.networkModule.vpc_public_subnet_id # Subnetwork ID                               # CIDR blocks for network subnets
 
 #   # General configuration
 #   general             = var.general                               # General project variables
@@ -145,59 +142,58 @@ module "windows_server" {
 }
 
 # Snort Server module to deploy a Snort instance for network intrusion detection.
-# module "snort_server" {
-#   source = "./modules/snort-server"
+module "snort_server" {
+  source = "./modules/snort-server"
 
-#   # Network configuration (GCP equivalent of VPC and subnet IDs)
-#   vpc_network          = module.networkModule.vpc_network_id
-#   subnetwork           = module.networkModule.vpc_public_subnet_id
-#   cidrs                = var.cidrs
+  # Network configuration (GCP equivalent of VPC and subnet IDs)
+  vpc_network          = module.networkModule.vpc_network_id
+  subnetwork           = module.networkModule.vpc_public_subnet_id
 
-#   # General configuration
-#   general              = var.general
-#   gcp                  = var.gcp
-#   # service_accounts     = var.service_accounts
-#   # snort_sa_email       = module.iam.service_account_emails["snort"]
-#   # snort_sa_roles       = module.iam.assigned_roles["snort"]
+  # General configuration
+  general              = var.general
+  gcp                  = var.gcp
+  # service_accounts     = var.service_accounts
+  # snort_sa_email       = module.iam.service_account_emails["snort"]
+  # snort_sa_roles       = module.iam.assigned_roles["snort"]
 
-#   # Server instances and dependencies
-#   splunk_server            = var.splunk_server
-#   snort_server             = var.snort_server
-#   windows_servers          = var.windows_servers
-#   windows_server_instances = module.windows_server.windows_server_instance_ids
-#   linux_servers            = var.linux_servers
-#   linux_server_instances   = module.linux_server.linux_server_instance_ids
-# }
+  # Server instances and dependencies
+  splunk_server            = var.splunk_server
+  snort_server             = var.snort_server
+  windows_servers          = var.windows_servers
+  windows_server_instances = module.windows_server.windows_servers
+  linux_servers            = var.linux_servers
+  linux_server_instances   = module.linux_server.linux_servers
+}
 
-# # Zeek Server module to deploy and configure Zeek for network monitoring.
-# module "zeek_server" {
-#   source                          = "./modules/zeek-server"
+# Zeek Server module to deploy and configure Zeek for network monitoring.
+module "zeek_server" {
+  source                          = "./modules/zeek-server"
 
-#   # Network configuration (GCP equivalent of VPC and subnet IDs)
-#   vpc_network                     = module.networkModule.vpc_network_id
-#   subnetwork                      = module.networkModule.vpc_public_subnet_id
-#   cidrs                           = var.cidrs
+  # Network configuration (GCP equivalent of VPC and subnet IDs)
+  vpc_network                     = module.networkModule.vpc_network_id
+  subnetwork                      = module.networkModule.vpc_public_subnet_id
 
-#   # General configuration
-#   general                         = var.general
-#   gcp                             = var.gcp
-#   # service_accounts                = var.service_accounts
-#   # zeek_sa_email                   = module.iam.service_account_emails["zeek"]
-#   # zeek_sa_roles                   = module.iam.assigned_roles["zeek"]
+  # General configuration
+  general                         = var.general
+  gcp                             = var.gcp
+  # service_accounts                = var.service_accounts
+  # zeek_sa_email                   = module.iam.service_account_emails["zeek"]
+  # zeek_sa_roles                   = module.iam.assigned_roles["zeek"]
 
-#   # Server instances and dependencies
-#   splunk_server                   = var.splunk_server
-#   snort_server                    = var.snort_server
-#   zeek_server                     = var.zeek_server
-#   windows_servers                 = var.windows_servers
-#   windows_server_instances        = module.windows_server.windows_server_instance_ids
-#   linux_servers                   = var.linux_servers
-#   linux_server_instances          = module.linux_server.linux_server_instance_ids
+  # Server instances and dependencies
+  splunk_server                   = var.splunk_server
+  snort_server                    = var.snort_server
+  zeek_server                     = var.zeek_server
+  windows_servers                 = var.windows_servers
+  windows_server_instances        = module.windows_server.windows_servers
+  linux_servers                   = var.linux_servers
+  linux_server_instances          = module.linux_server.linux_servers
 
-#   snort_sensor_self_links         = module.snort_server.snort_server_self_links         # Snort sensor self-links
-#   snort_forwarding_rule_self_link = module.snort_server.snort_forwarding_rule_self_link # Snort forwarding rule self-link
-#   snort_backend_service_self_link = module.snort_server.snort_backend_service_self_link # Snort backend service self-link
-# }
+  # snort_sensor_self_links         = module.snort_server.snort_server_self_links         # Snort sensor self-links
+  # snort_forwarding_rule_self_link = module.snort_server.snort_forwarding_rule_self_link # Snort forwarding rule self-link
+  # snort_backend_service_self_link = module.snort_server.snort_backend_service_self_link # Snort backend service self-link
+
+}
 
 # # Logging module for Splunk with configurations for alerts and monitoring.
 # module "logging_splunk" {

@@ -65,25 +65,20 @@ def get_all_instances(key_name, region):
     return instances
 
 
-def get_instance_by_name(project_id, instance_name, key_name, ar_name, region):
+def get_instance_by_name(instance_name, key_name, region):
     # First get all instances using the existing function
     instances = get_all_instances(key_name, region)
 
-    # Find the specific instance by name
     for instance in instances:
-        if instance.name == instance_name:
-            # Check if labels match ar_name
-            if "labels" in instance:
-                labels = instance.labels
-                if ar_name in labels.values():
-                    return instance
+        if "labels" in instance:
+            labels = instance.labels
+            if "name" in labels and labels["name"] == instance_name:
+                return instance
 
     return None  # Return None if no matching instance is found
 
 
-def get_instances_by_ids(
-    project_id, instance_ids, instance_name, key_name, ar_name, region
-):
+def get_instances_by_ids(instance_ids, instance_name, key_name, ar_name, region):
     # First get all instances using the existing function
     instances = get_all_instances(key_name, region)
 
@@ -100,23 +95,14 @@ def get_instances_by_ids(
     return result
 
 
-def get_single_instance_public_ip(project_id, instance_name, key_name, ar_name, region):
+def get_single_instance_public_ip(instance_name, key_name, region):
     # First get all instances using the existing function
-    instances = get_all_instances(key_name, region)
-
-    # Find the specific instance by name
-    for instance in instances:
-        if instance.name == instance_name:
-            # Check if labels match ar_name
-            if "labels" in instance:
-                labels = instance.labels
-                if ar_name in labels.values():
-                    # Extract the public IP
-                    for network_interface in instance.network_interfaces:
-                        if network_interface.access_configs:
-                            return network_interface.access_configs[0].nat_ip
-
-    return None  # Return None if no matching instance or public IP is found
+    return (
+        get_instance_by_name(instance_name, key_name, region)
+        .network_interfaces[0]
+        .access_configs[0]
+        .nat_i_p
+    )
 
 
 def change_instance_state(project_id, instances, new_state, logger):

@@ -95,11 +95,22 @@ azure:
 
 gcp:
   region: "europe-west3"
+  # Region used in GCP. This should be the same as the region configured in GCP CLI.
+
   zone: "europe-west3-a"
+  # Zone used in GCP. This should be the same as the zone configured in GCP CLI.
+
   project_id: "project-id"
+  # Project ID used in GCP. This should be the same as the project ID configured in GCP CLI.
+
   public_key_path: "~/.ssh/id_rsa.pub"
+  # Path to your public key.
+
   private_key_path: "~/.ssh/id_rsa"
+  # Path to your private key.
+
   use_static_ip: "0"
+  # Enable/disable usage of static IP by setting this to 1 or 0.
 
 local:
   provider: "Virtual Box"

@@ -9,20 +9,6 @@
 # These outputs can be used for verification or additional configuration steps.
 # -----------------------------------------------------------------------------
 
-# Output: Phantom Service Account Email
-# Provides the email address of the Phantom Service Account, if created
-output "phantom_sa_email" {
-  description = "The email address of the Phantom Service Account"
-  value       = var.phantom_sa_email
-}
-
-# Output: phantom Server Roles
-# Lists the roles assigned to the Phantom Service Account, if created
-output "phantom_sa_roles" {
-  description = "Roles assigned to the Phantom Service Account"
-  value       = var.phantom_sa_roles
-}
-
 # Output: Name of the Phantom Server Instance
 output "phantom_server_name" {
   description = "The name of the Phantom Server Instance"

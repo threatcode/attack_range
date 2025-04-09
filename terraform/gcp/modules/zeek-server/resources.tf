@@ -1,4 +1,3 @@
-
 # -----------------------------------------------------------------------------
 # Zeek Sensor Instance Configuration
 # -----------------------------------------------------------------------------
@@ -9,17 +8,17 @@
 
 # Zeek instance configuration in GCP
 resource "google_compute_instance" "zeek_sensor" {
-  count        = var.zeek_server.zeek_server == 1 ? 1 : 0
+  count        = var.zeek_server.zeek_server == "1" ? 1 : 0
   name         = "${var.general.attack_range_name}-zeek-server-${var.general.key_name}"
-  machine_type = var.zeek_server.machine_type  # Instance type, similar to "m5.2xlarge" in AWS
+  machine_type = "e2-standard-4"  # Instance type, similar to "m5.2xlarge" in AWS
   zone         = var.gcp.zone
 
   # Boot Disk configuration for Zeek instance
   boot_disk {
     initialize_params {
-      image = var.zeek_server.image      # GCP image for instance, e.g., "ubuntu-2204-lts"
-      size  = var.zeek_server.disk_size  # Disk size in GB
-      type  = var.zeek_server.disk_type  # Disk type, e.g., "pd-ssd"
+      image = "ubuntu-2004-lts"      # GCP image for instance, e.g., "ubuntu-2204-lts"
+      size  = 60  # Disk size in GB
+      type  = "pd-standard"  # Disk type, e.g., "pd-ssd"
     }
     auto_delete = true
   }
@@ -28,7 +27,7 @@ resource "google_compute_instance" "zeek_sensor" {
   network_interface {
     network    = var.vpc_network
     subnetwork = var.subnetwork
-    network_ip = var.zeek_server.network_ip  # Internal IP for instance
+    network_ip = "10.0.1.50"  # Internal IP for instance
     access_config {
       nat_ip = length(google_compute_address.zeek_ip) > count.index ? google_compute_address.zeek_ip[count.index].address : null
     }
@@ -94,14 +93,14 @@ resource "google_compute_instance" "zeek_sensor" {
 
 # Static IP allocation for the Zeek instance
 resource "google_compute_address" "zeek_ip" {
-  count  = (var.zeek_server.zeek_server == 1 && var.gcp.use_elastic_ips == "1") ? 1 : 0
+  count  = (var.zeek_server.zeek_server == "1" && var.gcp.use_static_ip == "1") ? 1 : 0
   name   = "zeek-ip-${count.index}"
   region = var.gcp.region
 }
 
 # Packet Mirroring configuration for traffic redirection to the Zeek instance
 resource "google_compute_packet_mirroring" "zeek_packet_mirroring" {
-  count     = var.zeek_server.zeek_server == 1 ? 1 : 0
+  count     = var.zeek_server.zeek_server == "1" ? 1 : 0
   name      = "zeek-packet-mirroring-${var.general.key_name}-${var.general.attack_range_name}"
   region    = var.gcp.region
   
@@ -122,16 +121,69 @@ resource "google_compute_packet_mirroring" "zeek_packet_mirroring" {
   }
 
   collector_ilb {
-    url = google_compute_forwarding_rule.zeek_forwarding_rule.self_link  # Link to packet mirroring collector
+    url = google_compute_forwarding_rule.zeek_forwarding_rule[0].self_link  # Link to packet mirroring collector
+  }
+}
+
+# Mirror sessions for Windows servers
+resource "google_compute_packet_mirroring" "zeek_windows_mirroring" {
+  count     = var.zeek_server.zeek_server == "1" ? length(var.windows_servers) : 0
+  name      = "zeek-windows-mirroring-${count.index}-${var.general.key_name}-${var.general.attack_range_name}"
+  region    = var.gcp.region
+  
+  network {
+    url = var.vpc_network
+  }
+
+  mirrored_resources {
+    instances {
+      url = var.windows_server_instances[count.index].self_link
+    }
+  }
+
+  filter {
+    direction = "BOTH"
+    cidr_ranges = ["0.0.0.0/0"]
+  }
+
+  collector_ilb {
+    url = google_compute_forwarding_rule.zeek_forwarding_rule[0].self_link
+  }
+}
+
+# Mirror sessions for Linux servers
+resource "google_compute_packet_mirroring" "zeek_linux_mirroring" {
+  count     = var.zeek_server.zeek_server == "1" ? length(var.linux_servers) : 0
+  name      = "zeek-linux-mirroring-${count.index}-${var.general.key_name}-${var.general.attack_range_name}"
+  region    = var.gcp.region
+  
+  network {
+    url = var.vpc_network
+  }
+
+  mirrored_resources {
+    instances {
+      url = var.linux_server_instances[count.index].self_link
+    }
+  }
+
+  filter {
+    direction = "BOTH"
+    cidr_ranges = ["0.0.0.0/0"]
+  }
+
+  collector_ilb {
+    url = google_compute_forwarding_rule.zeek_forwarding_rule[0].self_link
   }
 }
 
 # Internal load balancer as packet mirroring collector for Zeek traffic
 resource "google_compute_forwarding_rule" "zeek_forwarding_rule" {
+  count     = var.zeek_server.zeek_server == "1" ? 1 : 0
   name                   = "zeek-mirror-forwarding-rule"
   region                 = var.gcp.region
   load_balancing_scheme  = "INTERNAL"
-  backend_service        = google_compute_region_backend_service.zeek_backend_service.self_link
+  backend_service        = google_compute_region_backend_service.zeek_backend_service[0].self_link
   all_ports              = true  # Open all ports for traffic
   ip_protocol            = "TCP"
   network                = var.vpc_network
@@ -141,19 +193,21 @@ resource "google_compute_forwarding_rule" "zeek_forwarding_rule" {
 
 # Backend service for load balancing and packet collection for Zeek
 resource "google_compute_region_backend_service" "zeek_backend_service" {
+  count     = var.zeek_server.zeek_server == "1" ? 1 : 0
   name              = "zeek-backend-service"
   region            = var.gcp.region
   protocol          = "TCP"
-  health_checks     = [google_compute_health_check.zeek_health_check.id]
+  health_checks     = [google_compute_health_check.zeek_health_check[0].id]
 
   backend {
-    group           = google_compute_instance_group.zeek_group.self_link
+    group           = google_compute_instance_group.zeek_group[0].self_link
     balancing_mode  = "CONNECTION"
   }
 }
 
 # Instance group for the Zeek instances (used in backend service)
 resource "google_compute_instance_group" "zeek_group" {
+  count     = var.zeek_server.zeek_server == "1" ? 1 : 0
   name       = "zeek-instance-group"
   zone       = var.gcp.zone
   instances  = [for instance in google_compute_instance.zeek_sensor : instance.self_link]
@@ -162,6 +216,7 @@ resource "google_compute_instance_group" "zeek_group" {
 
 # Health check for Zeek instances (for load balancing)
 resource "google_compute_health_check" "zeek_health_check" {
+  count     = var.zeek_server.zeek_server == "1" ? 1 : 0
   name               = "zeek-health-check"
   check_interval_sec = 10
   timeout_sec        = 5

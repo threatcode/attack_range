@@ -35,3 +35,7 @@ output "windows_server_instance_ids" {
   description = "Instance IDs of the Windows Server instances"
   value       = [for instance in google_compute_instance.windows_server : instance.id]
 }
+
+output "windows_servers" {
+  value = google_compute_instance.windows_server
+}

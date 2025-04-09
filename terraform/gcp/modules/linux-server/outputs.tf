@@ -42,3 +42,7 @@ output "linux_server_instance_ids" {
   description = "List of Linux server instance IDs"
   value       = [for instance in google_compute_instance.linux_server : instance.id]
 }
+
+output "linux_servers" {
+  value = google_compute_instance.linux_server
+}

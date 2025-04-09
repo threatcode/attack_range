@@ -109,18 +109,7 @@ variable "phantom_server" {
 
 # Configuration for NGINX server instance
 variable "nginx_server" {
-  description = "Nginx server configuration"
-  type = object({
-    nginx_server           = number # "1" if enabled, "0" otherwise
-    proxy_server_ip        = string # IP of proxy server, if applicable
-    proxy_server_port      = string # Port for proxy server, if applicable
-  })
-
-  default = {
-    nginx_server            = "0"
-    proxy_server_ip         = "10.20.2.254"
-    proxy_server_port       = "8000"
-  }
+  type = map(string)
 }
 
 # Configuration for Kali Linux server instance
@@ -179,9 +168,7 @@ variable "windows_servers" {
 # Placeholder variables for Snort and Zeek servers and simulation settings
 variable "snort_server" { 
   description = ""
-  type = object({
-    snort_server            = number # Enable Snort server (1 for true)
-  })
+  type = map(string)
 
   default = {
       snort_server            = "1"
@@ -190,9 +177,7 @@ variable "snort_server" {
 
 variable "zeek_server" { 
   description = ""
-  type = object({
-    zeek_server             = number # Enable Snort server (1 for true)
-  })
+  type = map(string)
 
   default = {
       zeek_server             = "1"

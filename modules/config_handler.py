@@ -150,3 +150,17 @@ class ConfigHandler:
                 "ERROR: You can not use a phantom server or bring your own phantom when you use a bring your own splunk."
             )
             sys.exit(1)
+
+        if (
+            config["phantom_server"]["phantom_server"] == "1"
+            and config["general"]["cloud_provider"] == "gcp"
+        ):
+            print("ERROR: Phantom Server not supported in GCP.")
+            sys.exit(1)
+
+        if (
+            config["kali_server"]["kali_server"] == "1"
+            and config["general"]["cloud_provider"] == "gcp"
+        ):
+            print("ERROR: Kali Server not supported in GCP.")
+            sys.exit(1)

@@ -1,4 +1,3 @@
-
 # -----------------------------------------------------------------------------
 # Splunk Server Configuration on Google Compute Platform
 # This resource block defines a Splunk Server instance in GCP, including 
@@ -46,9 +45,13 @@ resource "google_compute_instance" "splunk_server" {
     }
 
     # Use local-exec provisioner to clean known_hosts
-    # provisioner "local-exec" {
-    #     command = "ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}"
-    # }
+    provisioner "local-exec" {
+        command = <<-EOT
+            mkdir -p ~/.ssh
+            touch ~/.ssh/known_hosts
+            ssh-keygen -f ~/.ssh/known_hosts -R ${self.network_interface.0.access_config.0.nat_ip}
+        EOT
+    }
 
     # Tagging and Labeling for Organization
     tags = ["gcp-infrastructure", "splunk-server", "attack-range"]

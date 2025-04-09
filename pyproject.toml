@@ -25,6 +25,11 @@ questionary = "^2.0.1"
 Jinja2 = "^3.1.4"
 python-vagrant = "^1.0.0"
 gitpython = "^3.1.43"
+google-cloud-compute = "*"
+google-cloud-storage = "*"
+google-cloud-bigtable = "*"
+google-cloud-secret-manager = "*"
+google-auth = "*"
 
 [[tool.poetry.source]]
 name = "pypi-public"

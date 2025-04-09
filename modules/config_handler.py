@@ -22,6 +22,7 @@ class ConfigHandler:
             "general",
             "aws",
             "azure",
+            "gcp",
             "splunk_server",
             "phantom_server",
             "kali_server",
@@ -29,7 +30,6 @@ class ConfigHandler:
             "simulation",
             "zeek_server",
             "snort_server",
-            "caldera_server",
         ]
 
         for parent_key in parent_keys:
@@ -152,8 +152,15 @@ class ConfigHandler:
             sys.exit(1)
 
         if (
-            config["caldera_server"]["caldera_server"] == "1"
-            and config["general"]["cloud_provider"] == "azure"
+            config["phantom_server"]["phantom_server"] == "1"
+            and config["general"]["cloud_provider"] == "gcp"
         ):
-            print("ERROR: Caldera Server not supported in Azure.")
+            print("ERROR: Phantom Server not supported in GCP.")
+            sys.exit(1)
+
+        if (
+            config["kali_server"]["kali_server"] == "1"
+            and config["general"]["cloud_provider"] == "gcp"
+        ):
+            print("ERROR: Kali Server not supported in GCP.")
             sys.exit(1)

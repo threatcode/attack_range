@@ -30,6 +30,7 @@ class ConfigHandler:
             "simulation",
             "zeek_server",
             "snort_server",
+            "caldera_server",
         ]
 
         for parent_key in parent_keys:

@@ -55,9 +55,11 @@ By: Splunk Threat Research Team [STRT] - research@splunk.com
 
     if config["general"]["cloud_provider"] == "aws":
         config.pop("azure")
+        config.pop("gcp")
         controller = AwsController(config)
     elif config["general"]["cloud_provider"] == "azure":
         config.pop("aws")
+        config.pop("gcp")
         controller = AzureController(config)
     elif config["general"]["cloud_provider"] == "gcp":
         config.pop("aws")

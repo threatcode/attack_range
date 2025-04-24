@@ -473,7 +473,7 @@ class ConfigurationManager:
                 "type": "text",
                 "message": "Download the Splunk SOAR unpriv installer and save it in the apps folder. What is the name of the file?",
                 "name": "phantom_installer",
-                "when": lambda answers: answers["phantom"],
+                "when": lambda answers: answers.get("phantom", False),
             },
         ]
 
@@ -495,7 +495,7 @@ class ConfigurationManager:
             if answers["snort_server"]:
                 self.configuration["snort_server"] = {"snort_server": "1"}
 
-        if answers["phantom"]:
+        if answers.get("phantom", False):
             self.configuration["phantom_server"] = {"phantom_server": "1"}
 
         if "phantom_installer" in answers:

@@ -10,8 +10,7 @@ class AttackRangeController(abc.ABC):
     def __init__(self, config: dict):
         self.config = config
         self.logger = logger.setup_logging(
-            os.path.join(os.path.dirname(__file__), '../attack_range.log'), 
-            'INFO'
+            os.path.join(os.path.dirname(__file__), "../attack_range.log"), "INFO"
         )
 
     @abc.abstractmethod
@@ -56,4 +55,12 @@ class AttackRangeController(abc.ABC):
 
     @abc.abstractmethod
     def init_remote_backend(self, backend_name) -> None:
+        pass
+
+    @abc.abstractmethod
+    def start_cap_attack(self, target: str) -> None:
+        pass
+
+    @abc.abstractmethod
+    def stop_cap_attack(self, target: str) -> None:
         pass

@@ -20,6 +20,7 @@ Attack Range Config <Attack_Range_Config>
 Attack Simulation <Attack_Simulation>
 Attack Data <Attack_Data>
 Attack Range Features <Attack_Range_Features>
+CapAttack <Cap_Attack>
 Cost Explorer <Cost_Explorer>
 
 ```

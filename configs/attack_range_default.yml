@@ -112,10 +112,6 @@ gcp:
   use_static_ip: "0"
   # Enable/disable usage of static IP by setting this to 1 or 0.
 
-local:
-  provider: "Virtual Box"
-# Attack Range Local used Virtualbox and Vagrant to build the Attack Range.
-
 splunk_server:
 
   install_es: "0"
@@ -340,3 +336,12 @@ simulation:
 
   atomic_red_team_branch: master
   # Specify the branch for Atomic Red Team.
+
+  cap_attack: "0"
+  # Enable/Disable CAP Attack by setting this to 1 or 0.
+
+  cap_attack_upload_threat_capture: "0"
+  # Enable/Disable CAP Attack upload of threat capture by setting this to 1 or 0.
+
+  snapattack_api_key: ""
+  # Specify the API key for SnapAttack.

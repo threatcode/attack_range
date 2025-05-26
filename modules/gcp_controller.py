@@ -1,17 +1,16 @@
 import os
 import ansible_runner
-import subprocess
 import sys
 import signal
 import yaml
 import json
 
 from python_terraform import Terraform, IsNotFlagged
-from modules import gcp_service, splunk_sdk
 from tabulate import tabulate
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
 
+from modules import gcp_service, splunk_sdk
 from modules.attack_range_controller import AttackRangeController
 from modules.art_simulation_controller import ArtSimulationController
 from modules.purplesharp_simulation_controller import PurplesharpSimulationController
@@ -146,6 +145,110 @@ class GCPController(AttackRangeController):
             simulation_controller = PurplesharpSimulationController(self.config)
             simulation_controller.simulate(target, technique, playbook)
 
+    def start_cap_attack(self, target: str) -> None:
+        self.logger.info("[action] > start_cap_attack\n")
+        target_public_ip = gcp_service.get_single_instance_public_ip(
+            target,
+            self.config["general"]["key_name"],
+            self.config["gcp"]["region"],
+        )
+        private_key_path = self.config["gcp"]["private_key_path"]
+
+        if "win" in target:
+            ansible_user = "Administrator"
+            ansible_port = 5986
+            cmd_line = str("-i " + target_public_ip + ", ")
+            extravars = {
+                "ansible_port": ansible_port,
+                "ansible_connection": "winrm",
+                "ansible_winrm_server_cert_validation": "ignore",
+                "ansible_user": ansible_user,
+                "ansible_password": self.config["general"]["attack_range_password"],
+                "cap_attack_action": "start",
+            }
+        else:
+            ansible_user = "ubuntu"
+            ansible_port = 22
+            cmd_line = (
+                "-u "
+                + ansible_user
+                + " --private-key "
+                + private_key_path
+                + " -i "
+                + target_public_ip
+                + ", "
+            )
+            extravars = {
+                "ansible_port": ansible_port,
+                "ansible_connection": "ssh",
+                "ansible_user": ansible_user,
+                "cap_attack_action": "start",
+            }
+
+        ansible_runner.run(
+            private_data_dir=os.path.join(os.path.dirname(__file__), "../"),
+            cmdline=cmd_line,
+            roles_path=os.path.join(os.path.dirname(__file__), "ansible/roles"),
+            playbook=os.path.join(os.path.dirname(__file__), "ansible/cap_attack.yml"),
+            extravars=extravars,
+            verbosity=0,
+        )
+
+    def stop_cap_attack(self, target: str) -> None:
+        self.logger.info("[action] > stop_cap_attack\n")
+        target_public_ip = gcp_service.get_single_instance_public_ip(
+            target,
+            self.config["general"]["key_name"],
+            self.config["gcp"]["region"],
+        )
+        private_key_path = self.config["gcp"]["private_key_path"]
+
+        if "win" in target:
+            ansible_user = "Administrator"
+            ansible_port = 5986
+            cmd_line = str("-i " + target_public_ip + ", ")
+            extravars = {
+                "ansible_port": ansible_port,
+                "ansible_connection": "winrm",
+                "ansible_winrm_server_cert_validation": "ignore",
+                "ansible_user": ansible_user,
+                "ansible_password": self.config["general"]["attack_range_password"],
+                "cap_attack_action": "stop",
+                "cap_attack_upload_threat_capture": self.config["simulation"][
+                    "cap_attack_upload_threat_capture"
+                ],
+            }
+        else:
+            ansible_user = "ubuntu"
+            ansible_port = 22
+            cmd_line = (
+                "-u "
+                + ansible_user
+                + " --private-key "
+                + private_key_path
+                + " -i "
+                + target_public_ip
+                + ", "
+            )
+            extravars = {
+                "ansible_port": ansible_port,
+                "ansible_connection": "ssh",
+                "ansible_user": ansible_user,
+                "cap_attack_action": "stop",
+                "cap_attack_upload_threat_capture": self.config["simulation"][
+                    "cap_attack_upload_threat_capture"
+                ],
+            }
+
+        ansible_runner.run(
+            private_data_dir=os.path.join(os.path.dirname(__file__), "../"),
+            cmdline=cmd_line,
+            roles_path=os.path.join(os.path.dirname(__file__), "ansible/roles"),
+            playbook=os.path.join(os.path.dirname(__file__), "ansible/cap_attack.yml"),
+            extravars=extravars,
+            verbosity=0,
+        )
+
     def show(self) -> None:
         self.logger.info("[action] > show\n")
         instances = gcp_service.get_all_instances(
@@ -155,7 +258,6 @@ class GCPController(AttackRangeController):
         response = []
         messages = []
         instances_running = False
-        splunk_ip = ""
         for instance in instances:
             if instance.status == "RUNNING":
                 instances_running = True
@@ -168,10 +270,10 @@ class GCPController(AttackRangeController):
                     [instance.name, instance.status, public_ip, str(instance.id)]
                 )
                 if instance.name.startswith("ar-splunk"):
-                    splunk_ip = public_ip
+                    ip_address = public_ip
                     messages.append(
                         "\nAccess Guacamole via:\n\tWeb > http://"
-                        + public_ip
+                        + ip_address
                         + ":8080/guacamole"
                         + "\n\tusername: Admin \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
@@ -179,22 +281,22 @@ class GCPController(AttackRangeController):
                     if self.config["splunk_server"]["install_es"] == "1":
                         messages.append(
                             "\nAccess Splunk via:\n\tWeb > https://"
-                            + public_ip
+                            + ip_address
                             + ":8000\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
-                            + public_ip
+                            + ip_address
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                     else:
                         messages.append(
                             "\nAccess Splunk via:\n\tWeb > http://"
-                            + public_ip
+                            + ip_address
                             + ":8000\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
-                            + public_ip
+                            + ip_address
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
@@ -205,31 +307,31 @@ class GCPController(AttackRangeController):
                     ):
                         messages.append(
                             "\nAccess Phantom via:\n\tWeb > https://"
-                            + public_ip
+                            + ip_address
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " centos@"
-                            + public_ip
+                            + ip_address
                             + "\n\tusername: soar_local_admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                     else:
                         messages.append(
                             "\nAccess Phantom via:\n\tWeb > https://"
-                            + public_ip
+                            + ip_address
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " centos@"
-                            + public_ip
+                            + ip_address
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                 elif instance.name.startswith("ar-win"):
                     messages.append(
                         "\nAccess Windows via:\n\tRDP > rdp://"
-                        + public_ip
+                        + ip_address
                         + ":3389\n\tusername: Administrator \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -238,7 +340,7 @@ class GCPController(AttackRangeController):
                         "\nAccess Linux via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + public_ip
+                        + ip_address
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -247,7 +349,7 @@ class GCPController(AttackRangeController):
                         "\nAccess Kali via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " kali@"
-                        + public_ip
+                        + ip_address
                         + "\n\tusername: kali \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -256,16 +358,16 @@ class GCPController(AttackRangeController):
                         "\nAccess Nginx Web Proxy via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + public_ip
+                        + ip_address
                         + "\n\tWeb > http://"
-                        + public_ip
+                        + ip_address
                     )
                 elif instance.name.startswith("ar-zeek"):
                     messages.append(
                         "\nAccess Zeek via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + public_ip
+                        + ip_address
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -274,7 +376,7 @@ class GCPController(AttackRangeController):
                         "\nAccess Snort via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + public_ip
+                        + ip_address
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -354,13 +456,14 @@ class GCPController(AttackRangeController):
             + "-"
             + self.config["general"]["attack_range_name"]
         )
+
         splunk_ip = gcp_service.get_single_instance_public_ip(
             splunk_instance,
             self.config["general"]["key_name"],
             self.config["gcp"]["region"],
         )
         cmdline = "-i %s, -u %s" % (splunk_ip, ansible_vars["ansible_user"])
-        runner = ansible_runner.run(
+        ansible_runner.run(
             private_data_dir=os.path.join(os.path.dirname(__file__), "../"),
             cmdline=cmdline,
             roles_path=os.path.join(os.path.dirname(__file__), "ansible/roles"),

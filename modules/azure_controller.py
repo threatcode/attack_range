@@ -12,7 +12,7 @@ from modules import azure_service, splunk_sdk
 from modules.attack_range_controller import AttackRangeController
 from modules.art_simulation_controller import ArtSimulationController
 from modules.purplesharp_simulation_controller import PurplesharpSimulationController
-
+from pathlib import Path
 
 class AzureController(AttackRangeController):
 
@@ -287,6 +287,10 @@ class AzureController(AttackRangeController):
         self.logger.info("[Completed]")
 
     def replay(self, file_name, index, sourcetype, source) -> None:
+        ### check if input log file is afile path or just a file name
+        ### if file name ,assume it is in current working dir of attack_range.py
+        if Path(file_name).parent == Path("."):
+            file_name = str(Path("../..")/file_name)
         ansible_vars = {}
         ansible_vars["file_name"] = file_name
         ansible_vars["ansible_user"] = "ubuntu"

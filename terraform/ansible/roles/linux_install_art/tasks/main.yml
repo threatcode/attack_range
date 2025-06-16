@@ -1,5 +1,9 @@
 ---
 
+- name: Install CAP Attack
+  include_tasks: cap_attack.yml
+  when: simulation.cap_attack == "1"
+
 - name: Install Atomic Red Team
   become: true
   shell: |
@@ -16,8 +20,8 @@
    state: directory
 
 - name: copy default powershell profile
-  copy:
-    src: Microsoft.PowerShell_profile.ps1
+  template:
+    src: Microsoft.PowerShell_profile.ps1.j2
     dest: /root/.config/powershell/Microsoft.PowerShell_profile.ps1
     force: yes
 

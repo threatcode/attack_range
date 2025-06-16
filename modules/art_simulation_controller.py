@@ -101,6 +101,10 @@ class ArtSimulationController(SimulationController):
                     "ansible_password": self.config["general"]["attack_range_password"],
                     "art_repository": self.config["simulation"]["atomic_red_team_repo"],
                     "art_branch": self.config["simulation"]["atomic_red_team_branch"],
+                    "cap_attack": self.config["simulation"]["cap_attack"],
+                    "cap_attack_upload_threat_capture": self.config["simulation"][
+                        "cap_attack_upload_threat_capture"
+                    ],
                 },
                 verbosity=0,
             )
@@ -119,6 +123,10 @@ class ArtSimulationController(SimulationController):
                     "techniques": techniques,
                     "art_repository": self.config["simulation"]["atomic_red_team_repo"],
                     "art_branch": self.config["simulation"]["atomic_red_team_branch"],
+                    "cap_attack": self.config["simulation"]["cap_attack"],
+                    "cap_attack_upload_threat_capture": self.config["simulation"][
+                        "cap_attack_upload_threat_capture"
+                    ],
                 },
                 verbosity=0,
             )

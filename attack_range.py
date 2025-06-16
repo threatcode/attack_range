@@ -137,6 +137,16 @@ def init_remote_backend(args):
     controller.init_remote_backend(args.backend_name)
 
 
+def cap_attack(args):
+    controller = init(args)
+    if args.start:
+        controller.start_cap_attack(args.target)
+    elif args.stop:
+        controller.stop_cap_attack(args.target)
+    else:
+        print("Please specify either --start or --stop")
+
+
 def main(args):
     """
     main function parses the arguments passed to the script and calls the respctive method.
@@ -166,6 +176,9 @@ def main(args):
     )
     simulate_parser = actions_parser.add_parser(
         "simulate", help="simulates attack techniques"
+    )
+    cap_attack_parser = actions_parser.add_parser(
+        "cap_attack", help="starts and stops CAP Attack"
     )
     destroy_parser = actions_parser.add_parser(
         "destroy", help="destroy attack range instances"
@@ -260,6 +273,20 @@ def main(args):
     )
 
     simulate_parser.set_defaults(func=simulate)
+
+    cap_attack_parser.add_argument(
+        "-t",
+        "--target",
+        required=True,
+        help="target for CAP Attack. Use the name of the Windows instance",
+    )
+    cap_attack_parser.add_argument(
+        "--start", action="store_true", help="start CAP Attack threat capture"
+    )
+    cap_attack_parser.add_argument(
+        "--stop", action="store_true", help="stop CAP Attack threat capture"
+    )
+    cap_attack_parser.set_defaults(func=cap_attack)
 
     # Dump  Arguments
     dump_parser.add_argument(

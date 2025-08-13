@@ -105,7 +105,6 @@ resource "azurerm_virtual_machine" "windows" {
         "splunk_server": ${jsonencode(var.splunk_server)},
         "simulation": ${jsonencode(var.simulation)},
         "windows_servers": ${jsonencode(var.windows_servers[count.index])},
-        "caldera_server": ${jsonencode(var.caldera_server)},
       }
       EOF
     EOT

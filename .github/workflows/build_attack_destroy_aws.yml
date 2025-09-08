@@ -18,7 +18,7 @@ jobs:
           sudo apt update -qq
           sudo apt install -y openssh-client
       
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.9' #Available versions here - https://github.com/actions/python-versions/releases  easy to change/make a matrix/use pypy
           architecture: 'x64' # optional x64 or x86. Defaults to x64 if not specified

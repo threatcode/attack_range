@@ -2,3 +2,78 @@
 
 - name: Run BadBlood
   win_shell: C:\BadBlood\Invoke-BadBlood.ps1 -NonInteractive
+
+- name: Add Administrator to Remote Desktop Users group
+  win_group_membership:
+    name: "Remote Desktop Users"
+    members:
+      - Administrator
+    state: present
+  ignore_errors: yes
+
+- name: Add Administrator to Administrators group
+  win_group_membership:
+    name: "Administrators"
+    members:
+      - Administrator
+    state: present
+  ignore_errors: yes
+
+- name: Check if domain controller exists
+  win_shell: |
+    try {
+        Get-ADDomain -ErrorAction Stop
+        Write-Output "domain"
+    } catch {
+        Write-Output "workgroup"
+    }
+  register: domain_status
+  ignore_errors: yes
+
+- name: Add Administrator to Domain Admins group
+  win_shell: Add-ADGroupMember -Identity "Domain Admins" -Members Administrator -ErrorAction SilentlyContinue
+  when: domain_status.stdout_lines[0] == "domain"
+  ignore_errors: yes
+
+- name: Add Administrator to Enterprise Admins group
+  win_shell: Add-ADGroupMember -Identity "Enterprise Admins" -Members Administrator -ErrorAction SilentlyContinue
+  when: domain_status.stdout_lines[0] == "domain"
+  ignore_errors: yes
+
+- name: Add Administrator to Schema Admins group
+  win_shell: Add-ADGroupMember -Identity "Schema Admins" -Members Administrator -ErrorAction SilentlyContinue
+  when: domain_status.stdout_lines[0] == "domain"
+  ignore_errors: yes
+
+- name: Enable RDP (Terminal Services)
+  win_regedit:
+    path: HKLM:\System\CurrentControlSet\Control\Terminal Server
+    name: fDenyTSConnections
+    data: 0
+    type: dword
+  ignore_errors: yes
+
+- name: Enable RDP through Windows Firewall
+  win_firewall_rule:
+    name: "Remote Desktop - User Mode (TCP-In)"
+    enabled: yes
+    state: present
+    action: allow
+  ignore_errors: yes
+
+- name: Enable RDP through Windows Firewall (Shadow)
+  win_firewall_rule:
+    name: "Remote Desktop - Shadow (TCP-In)"
+    enabled: yes
+    state: present
+    action: allow
+  ignore_errors: yes
+
+- name: Grant Administrator "Log on through Remote Desktop Services" right
+  win_user_right:
+    name: SeRemoteInteractiveLogonRight
+    users:
+      - Administrator
+    action: add
+  ignore_errors: yes
+

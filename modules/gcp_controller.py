@@ -270,10 +270,9 @@ class GCPController(AttackRangeController):
                     [instance.name, instance.status, public_ip, str(instance.id)]
                 )
                 if instance.name.startswith("ar-splunk"):
-                    ip_address = public_ip
                     messages.append(
                         "\nAccess Guacamole via:\n\tWeb > http://"
-                        + ip_address
+                        + public_ip
                         + ":8080/guacamole"
                         + "\n\tusername: Admin \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
@@ -281,22 +280,22 @@ class GCPController(AttackRangeController):
                     if self.config["splunk_server"]["install_es"] == "1":
                         messages.append(
                             "\nAccess Splunk via:\n\tWeb > https://"
-                            + ip_address
+                            + public_ip
                             + ":8000\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
-                            + ip_address
+                            + public_ip
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                     else:
                         messages.append(
                             "\nAccess Splunk via:\n\tWeb > http://"
-                            + ip_address
+                            + public_ip
                             + ":8000\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " ubuntu@"
-                            + ip_address
+                            + public_ip
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
@@ -307,31 +306,31 @@ class GCPController(AttackRangeController):
                     ):
                         messages.append(
                             "\nAccess Phantom via:\n\tWeb > https://"
-                            + ip_address
+                            + public_ip
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " centos@"
-                            + ip_address
+                            + public_ip
                             + "\n\tusername: soar_local_admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                     else:
                         messages.append(
                             "\nAccess Phantom via:\n\tWeb > https://"
-                            + ip_address
+                            + public_ip
                             + ":8443"
                             + "\n\tSSH > ssh -i"
                             + self.config["gcp"]["private_key_path"]
                             + " centos@"
-                            + ip_address
+                            + public_ip
                             + "\n\tusername: admin \n\tpassword: "
                             + self.config["general"]["attack_range_password"]
                         )
                 elif instance.name.startswith("ar-win"):
                     messages.append(
                         "\nAccess Windows via:\n\tRDP > rdp://"
-                        + ip_address
+                        + public_ip
                         + ":3389\n\tusername: Administrator \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -340,7 +339,7 @@ class GCPController(AttackRangeController):
                         "\nAccess Linux via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + ip_address
+                        + public_ip
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -349,7 +348,7 @@ class GCPController(AttackRangeController):
                         "\nAccess Kali via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " kali@"
-                        + ip_address
+                        + public_ip
                         + "\n\tusername: kali \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -358,16 +357,16 @@ class GCPController(AttackRangeController):
                         "\nAccess Nginx Web Proxy via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + ip_address
+                        + public_ip
                         + "\n\tWeb > http://"
-                        + ip_address
+                        + public_ip
                     )
                 elif instance.name.startswith("ar-zeek"):
                     messages.append(
                         "\nAccess Zeek via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + ip_address
+                        + public_ip
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
@@ -376,7 +375,7 @@ class GCPController(AttackRangeController):
                         "\nAccess Snort via:\n\tSSH > ssh -i"
                         + self.config["gcp"]["private_key_path"]
                         + " ubuntu@"
-                        + ip_address
+                        + public_ip
                         + "\n\tusername: ubuntu \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )

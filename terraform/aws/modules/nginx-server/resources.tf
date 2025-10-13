@@ -30,6 +30,7 @@ resource "aws_instance" "nginx_server" {
     volume_type = "gp2"
     volume_size = "20"
     delete_on_termination = "true"
+    encrypted  = "true"
   }
 
   tags = {

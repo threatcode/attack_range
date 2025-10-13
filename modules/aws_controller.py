@@ -295,15 +295,24 @@ class AwsController(AttackRangeController):
         for instance in instances:
             if instance["State"]["Name"] == "running":
                 instances_running = True
+                # Find the Name tag
+                instance_name = None
+                for tag in instance["Tags"]:
+                    if tag["Key"] == "Name":
+                        instance_name = tag["Value"]
+                        break
+                
+                if instance_name is None:
+                    instance_name = "Unknown"
+                
                 response.append(
                     [
-                        instance["Tags"][0]["Value"],
+                        instance_name,
                         instance["State"]["Name"],
                         instance["NetworkInterfaces"][0]["Association"]["PublicIp"],
                         instance["InstanceId"],
                     ]
                 )
-                instance_name = instance["Tags"][0]["Value"]
                 if instance_name.startswith("ar-splunk"):
                     splunk_ip = instance["NetworkInterfaces"][0]["Association"][
                         "PublicIp"
@@ -443,8 +452,18 @@ class AwsController(AttackRangeController):
                         + self.config["general"]["attack_range_password"]
                     )
             else:
+                # Find the Name tag for non-running instances
+                instance_name = None
+                for tag in instance["Tags"]:
+                    if tag["Key"] == "Name":
+                        instance_name = tag["Value"]
+                        break
+                
+                if instance_name is None:
+                    instance_name = "Unknown"
+                
                 response.append(
-                    [instance["Tags"][0]["Value"], instance["State"]["Name"]]
+                    [instance_name, instance["State"]["Name"]]
                 )
 
         print()

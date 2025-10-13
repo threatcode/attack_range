@@ -100,3 +100,9 @@ variable "caldera_server" {
         "caldera_server" = "0"
     }
 }
+
+variable "aws_default_tags" {
+    type        = map(string)
+    description = "Default tags to apply to all AWS resources. Supply via tfvars or -var."
+    default     = {}
+}

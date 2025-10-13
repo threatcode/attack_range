@@ -88,6 +88,7 @@ resource "aws_instance" "splunk-server" {
     volume_type = "gp2"
     volume_size = "120"
     delete_on_termination = "true"
+    encrypted  = "true"
   }
 
   tags = {

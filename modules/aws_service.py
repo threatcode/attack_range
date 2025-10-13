@@ -27,8 +27,14 @@ def get_all_instances(key_name, ar_name, region):
         for instance in reservation['Instances']:
             if instance['State']['Name']!='terminated':
                 if len(instance['Tags']) > 0:
-                    tag_value = instance['Tags'][0]['Value']
-                    if tag_value.startswith('ar-'):
+                    # Find the Name tag
+                    tag_value = None
+                    for tag in instance['Tags']:
+                        if tag['Key'] == 'Name':
+                            tag_value = tag['Value']
+                            break
+                    
+                    if tag_value and tag_value.startswith('ar-'):
                         if (key_name in tag_value) and (ar_name in tag_value):
                             instances.append(instance)
 
@@ -38,8 +44,14 @@ def get_all_instances(key_name, ar_name, region):
 def get_instance_by_name(ec2_name, key_name, ar_name, region):
     instances = get_all_instances(key_name, ar_name, region)
     for instance in instances:
-        str = instance['Tags'][0]['Value']
-        if str == ec2_name:
+        # Find the Name tag
+        instance_name = None
+        for tag in instance['Tags']:
+            if tag['Key'] == 'Name':
+                instance_name = tag['Value']
+                break
+        
+        if instance_name == ec2_name:
             return instance
         
 def get_instances_by_ids(instance_ids, ec2_name, key_name, ar_name, region):

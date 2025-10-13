@@ -30,6 +30,7 @@ resource "aws_instance" "linux_server" {
     volume_type = "gp2"
     volume_size = "60"
     delete_on_termination = "true"
+    encrypted  = "true"
   }
 
   tags = {

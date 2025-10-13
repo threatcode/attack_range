@@ -30,6 +30,13 @@ resource "aws_instance" "snort_sensor" {
     Name = "ar-snort-${var.general.key_name}-${var.general.attack_range_name}"
   }
 
+  root_block_device {
+    volume_type = "gp2"
+    volume_size = "20"
+    delete_on_termination = "true"
+    encrypted  = "true"
+  }
+
   provisioner "remote-exec" {
     inline = ["echo booted"]
 

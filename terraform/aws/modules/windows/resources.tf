@@ -70,6 +70,7 @@ EOF
   root_block_device {
     delete_on_termination = true
     volume_size           = 50
+    encrypted  = "true"
   }
 
   provisioner "remote-exec" {

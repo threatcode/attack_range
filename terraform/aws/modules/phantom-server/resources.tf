@@ -35,6 +35,7 @@ resource "aws_instance" "phantom-server" {
     volume_type           = "gp2"
     volume_size           = "30"
     delete_on_termination = "true"
+    encrypted  = "true"
   }
   tags = {
     Name = "ar-phantom-${var.general.key_name}-${var.general.attack_range_name}"

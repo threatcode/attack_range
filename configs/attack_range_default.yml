@@ -117,7 +117,7 @@ splunk_server:
   install_es: "0"
   # Enable/Disable Enterprise Security by setting this to 1 or 0.
 
-  splunk_es_app: "splunk-enterprise-security_731.spl"
+  splunk_es_app: "splunk-enterprise-security_830.spl"
   # File name of the Enterprise Security spl file. Needs to be located in the apps folder.
 
   s3_bucket_url: "https://attack-range-appbinaries.s3-us-west-2.amazonaws.com"

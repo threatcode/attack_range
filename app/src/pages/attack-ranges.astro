@@ -1,0 +1,307 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { fetchAttackRanges } from '../utils/api-server';
+import type { AttackRange } from '../utils/api-server';
+
+let attackRanges: AttackRange[] = [];
+let error: string | null = null;
+
+try {
+	attackRanges = await fetchAttackRanges();
+} catch (e) {
+	error = e instanceof Error ? e.message : 'Failed to load attack ranges';
+}
+---
+
+<BaseLayout title="Running Attack Ranges" currentPath="/attack-ranges">
+	<div class="page-header">
+		<h1>Running Attack Ranges</h1>
+		<p class="subtitle">Monitor and manage your attack range deployments</p>
+	</div>
+
+	{error && (
+		<div class="error-message">
+			<p>Error: {error}</p>
+		</div>
+	)}
+
+	{attackRanges.length === 0 && !error && (
+		<div class="empty-state">
+			<p>No attack ranges found.</p>
+		</div>
+	)}
+
+	{attackRanges.length > 0 && (
+		<div class="list-container">
+			<table class="attack-ranges-table">
+				<thead>
+					<tr>
+						<th>Attack Range ID</th>
+						<th>Template Name</th>
+						<th>Status</th>
+					</tr>
+				</thead>
+				<tbody>
+					{attackRanges.map((ar) => {
+						const needsAttention = ar.status === 'wait_for_vpn' || ar.status === 'error';
+						return (
+							<tr 
+								class={`table-row ${needsAttention ? 'needs-attention' : ''}`}
+								data-status={ar.status}
+								data-id={ar.attack_range_id}
+							>
+								<td class="col-id">{ar.attack_range_id || 'Unknown ID'}</td>
+								<td class="col-template">
+									{ar.template_name || 'N/A'}
+								</td>
+								<td class="col-status">
+									<span class={`status-badge status-${ar.status.replace(/_/g, '-')}`}>
+										{ar.status}
+									</span>
+								</td>
+							</tr>
+						);
+					})}
+				</tbody>
+			</table>
+		</div>
+	)}
+
+</BaseLayout>
+
+<script>
+	const API_BASE_URL = import.meta.env.PUBLIC_API_URL || 'http://localhost:5000';
+	
+	document.addEventListener('DOMContentLoaded', () => {
+		const tableRows = document.querySelectorAll('.table-row');
+		
+		// Click handler for table rows - navigate to detail page
+		tableRows.forEach((row) => {
+			row.addEventListener('click', (e) => {
+				// Don't trigger if clicking on a button or interactive element
+				if ((e.target as HTMLElement).closest('button')) {
+					return;
+				}
+				
+				const attackRangeId = (row as HTMLElement).dataset.id;
+				if (!attackRangeId) return;
+				
+				// Navigate to detail page
+				window.location.href = `/attack-ranges/${attackRangeId}`;
+			});
+			
+			// Add hover cursor
+			row.style.cursor = 'pointer';
+		});
+		
+		// Smart polling: only refresh when attack range list or statuses change
+		let lastAttackRanges: string | null = null;
+		let pollingInterval: number | null = null;
+		
+		// Get initial state from the page
+		const getCurrentState = (): string => {
+			const rows = document.querySelectorAll('.table-row');
+			const state: Array<{id: string, status: string}> = [];
+			rows.forEach((row) => {
+				const id = (row as HTMLElement).dataset.id;
+				const status = (row as HTMLElement).dataset.status;
+				if (id && status) {
+					state.push({ id, status });
+				}
+			});
+			// Sort by ID for consistent comparison
+			state.sort((a, b) => a.id.localeCompare(b.id));
+			return JSON.stringify(state);
+		};
+		
+		lastAttackRanges = getCurrentState();
+		
+		const checkForChanges = async () => {
+			try {
+				const response = await fetch(`${API_BASE_URL}/attack-range/list`);
+				if (response.ok) {
+					const data = await response.json();
+					const attackRanges = data.attack_ranges || [];
+					
+					// Create current state
+					const currentState = JSON.stringify(
+						attackRanges
+							.map((ar: any) => ({ id: ar.attack_range_id, status: ar.status }))
+							.sort((a: any, b: any) => a.id.localeCompare(b.id))
+					);
+					
+					// Only reload if state changed
+					if (currentState !== lastAttackRanges) {
+						window.location.reload();
+					}
+				}
+			} catch (error) {
+				console.error('Error checking attack ranges:', error);
+			}
+		};
+		
+		// Poll every 3 seconds
+		pollingInterval = setInterval(checkForChanges, 3000) as unknown as number;
+		
+		// Clean up on page unload
+		window.addEventListener('beforeunload', () => {
+			if (pollingInterval !== null) {
+				clearInterval(pollingInterval);
+			}
+		});
+	});
+</script>
+
+<style>
+	.page-header {
+		margin-bottom: 3rem;
+	}
+
+	.page-header h1 {
+		margin: 0 0 0.75rem;
+		font-size: 2.5rem;
+		font-weight: 700;
+		background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+		letter-spacing: -0.02em;
+	}
+
+	.subtitle {
+		margin: 0;
+		color: #94a3b8;
+		font-size: 1.125rem;
+		font-weight: 400;
+	}
+
+	.error-message {
+		background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%);
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		border-radius: 12px;
+		padding: 1.25rem 1.5rem;
+		margin-bottom: 2rem;
+		color: #fca5a5;
+		box-shadow: 0 4px 6px rgba(239, 68, 68, 0.1);
+	}
+
+	.empty-state {
+		text-align: center;
+		padding: 5rem 2rem;
+		color: #64748b;
+		font-size: 1.125rem;
+	}
+
+	.list-container {
+		background: rgba(30, 41, 59, 0.6);
+		backdrop-filter: blur(10px);
+		border: 1px solid rgba(148, 163, 184, 0.1);
+		border-radius: 16px;
+		overflow: hidden;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+	}
+
+	.attack-ranges-table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.attack-ranges-table thead {
+		background: rgba(15, 23, 42, 0.8);
+	}
+
+	.attack-ranges-table th {
+		padding: 1rem 1.5rem;
+		text-align: left;
+		font-weight: 600;
+		color: #cbd5e1;
+		font-size: 0.875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		border-bottom: 2px solid rgba(148, 163, 184, 0.2);
+	}
+
+	.attack-ranges-table td {
+		padding: 1rem 1.5rem;
+		border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+		color: #e2e8f0;
+	}
+
+	.table-row {
+		transition: all 0.2s ease;
+		cursor: pointer;
+	}
+
+	.table-row:hover {
+		background: rgba(59, 130, 246, 0.1);
+	}
+
+	.table-row.needs-attention {
+		background: rgba(245, 158, 11, 0.1);
+	}
+
+	.table-row.needs-attention:hover {
+		background: rgba(245, 158, 11, 0.2);
+	}
+
+	.table-row[data-status="error"] {
+		background: rgba(239, 68, 68, 0.1);
+	}
+
+	.table-row[data-status="error"]:hover {
+		background: rgba(239, 68, 68, 0.2);
+	}
+
+	.col-id {
+		font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
+		font-size: 0.875rem;
+		color: #60a5fa;
+	}
+
+	.col-status,
+	.col-template {
+		transition: all 0.2s ease;
+	}
+
+	.status-badge {
+		padding: 0.375rem 0.875rem;
+		border-radius: 8px;
+		font-size: 0.75rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		border: 1px solid;
+		display: inline-block;
+	}
+
+	.status-running {
+		background: rgba(16, 185, 129, 0.15);
+		color: #34d399;
+		border-color: rgba(16, 185, 129, 0.3);
+	}
+
+	.status-wait_for_vpn {
+		background: rgba(245, 158, 11, 0.15);
+		color: #fbbf24;
+		border-color: rgba(245, 158, 11, 0.3);
+	}
+
+	.status-build_vpn,
+	.status-build_lab {
+		background: rgba(59, 130, 246, 0.15);
+		color: #60a5fa;
+		border-color: rgba(59, 130, 246, 0.3);
+	}
+
+	.status-error {
+		background: rgba(239, 68, 68, 0.15);
+		color: #f87171;
+		border-color: rgba(239, 68, 68, 0.3);
+	}
+
+	.status-queued {
+		background: rgba(148, 163, 184, 0.15);
+		color: #cbd5e1;
+		border-color: rgba(148, 163, 184, 0.3);
+	}
+</style>

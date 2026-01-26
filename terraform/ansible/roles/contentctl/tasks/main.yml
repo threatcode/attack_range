@@ -1,7 +1,0 @@
----
-
-- include_tasks: docker.yml
-  when: general.install_contentctl == "1"
-
-- include_tasks: contentctl.yml
-  when: general.install_contentctl == "1"

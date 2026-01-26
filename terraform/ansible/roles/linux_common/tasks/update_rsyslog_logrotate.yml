@@ -1,5 +1,0 @@
-- name: copy rsyslog logrotate config template
-  become: true
-  copy:
-    src: "../../configs/rsyslog_logrotate"
-    dest: "/etc/logrotate.d/rsyslog"

@@ -1,193 +1,111 @@
-# Locals variables
-# Creates a locals variables to obtain the first three octets of the private subnet.
-# -----------------------------------------------------------------------------
-# locals {
-#   private_cidr_prefix = cidrsubnet(var.cidrs["cidr_blocks"][1], 0, 0) #Get private subnet
-#   private_cidr_three_octets = join(".", slice(split(".", local.private_cidr_prefix), 0, 3))
-# }
 
-# -----------------------------------------------------------------------------
-# VPC Module Configuration
-# Creates a Google Compute Engine Virtual Private Cloud (VPC) with defined subnets.
-# Utilizes the Terraform Google network module for custom public and private subnets.
-# -----------------------------------------------------------------------------
-module "vpc" {
-  description            = "Google Compute Engine VPC network"
-  source                 = "terraform-google-modules/network/google"
-  version                = "9.3.0"
-  project_id             = var.gcp.project_id
-  network_name           = "vpc-${var.general.key_name}-${var.general.attack_range_name}"
+locals {
+  network_name = "ar-vpc-${var.attack_range_id}"
+}
+
+# VPC Network
+resource "google_compute_network" "vpc" {
+  name                    = local.network_name
   auto_create_subnetworks = false
-
-  subnets = [
-    {
-      subnet_name   = "public-subnet"
-      subnet_ip     = var.cidrs.cidr_blocks[0]  # Public subnet
-      subnet_region = var.gcp.region
-    }
-  ]
+  project                 = var.project_id
 }
 
-# -----------------------------------------------------------------------------
-# Static IP Address
-# Allocates a static external IP for use with instances requiring a fixed IP.
-# -----------------------------------------------------------------------------
-resource "google_compute_address" "static_ip" {
-  name   = "static-ip"
-  region = var.gcp.region
+# Public subnet
+resource "google_compute_subnetwork" "public" {
+  name          = "ar-public-subnet-${var.attack_range_id}"
+  ip_cidr_range = "10.0.1.0/24"
+  region        = var.region
+  network       = google_compute_network.vpc.id
+  project       = var.project_id
+
+  # Enable private Google access for instances without external IPs
+  private_ip_google_access = true
 }
 
-resource "google_compute_firewall" "allow_icmp" { 
+# Private subnet
+resource "google_compute_subnetwork" "private" {
+  name          = "ar-private-subnet-${var.attack_range_id}"
+  ip_cidr_range = "10.0.2.0/24"
+  region        = var.region
+  network       = google_compute_network.vpc.id
+  project       = var.project_id
 
-    description = "Allow ICMP from the IP whitelist" 
-    name    = "allow-icmp" 
-    network = module.vpc.network_name 
+  # Enable private Google access for instances without external IPs
+  private_ip_google_access = true
+}
 
-    allow { 
-        protocol = "icmp" 
-    } 
+# Cloud Router for NAT
+resource "google_compute_router" "router" {
+  name    = "ar-nat-router-${var.attack_range_id}"
+  region  = var.region
+  network = google_compute_network.vpc.id
+  project = var.project_id
+}
 
-    source_ranges = split(",", var.general.ip_whitelist) 
+# Cloud NAT for private subnet internet access
+resource "google_compute_router_nat" "nat" {
+  name                               = "ar-nat-${var.attack_range_id}"
+  router                             = google_compute_router.router.name
+  region                             = google_compute_router.router.region
+  nat_ip_allocate_option             = "AUTO_ONLY"
+  source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
+  project                            = var.project_id
 
-} 
+  subnetwork {
+    name                    = google_compute_subnetwork.private.id
+    source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
+  }
+}
 
-resource "google_compute_firewall" "allow_ar_ssh" { 
-
-    description = "Allow SSH from the IP whitelist" 
-    name    = "allow-ar-ssh" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["22"] 
-    } 
-
-    source_ranges = split(",", var.general.ip_whitelist) 
-
-} 
-
-resource "google_compute_firewall" "allow_telnet" { 
-
-    description = "Allow Telnet from the IP whitelist" 
-    name    = "allow-telnet" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["2323"] 
-    } 
-
-    source_ranges = split(",", var.general.ip_whitelist) 
-
-} 
-
-resource "google_compute_firewall" "allow_rdp" { 
-
-    description = "Allow RDP services from the IP whitelist" 
-    name    = "allow-rdp" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["3389", "3391"] 
-    } 
-
-    source_ranges = split(",", var.general.ip_whitelist) 
-} 
-
-resource "google_compute_firewall" "allow_winrm" { 
-
-    description =  "Allow WinRM ports from the IP whitelistWinRM" 
-    name    = "allow-winrm" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["5985", "5986"] 
-    } 
-
-    source_ranges = split(",", var.general.ip_whitelist) 
-
-}   
-
-resource "google_compute_firewall" "allow_custom_tcp_port" { 
-
-    description =  "Allow custom TCP ports from the IP whitelistWinRM" 
-    name    = "allow-custom-tcp-port" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["7999"] 
-    } 
-
-    source_ranges = split(",", var.general.ip_whitelist) 
-} 
-
-resource "google_compute_firewall" "allow_web_services" { 
-
-    description = "Allow web services from the IP whitelist" 
-    name    = "allow-web-services" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["80", "443", "8080", "8443", "8888"] 
-    } 
-    
-    source_ranges = split(",", var.general.ip_whitelist) 
-} 
-
-resource "google_compute_firewall" "allow_splunk" { 
-
-    description = "Allow Splunk services from the IP whitelist" 
-    name    = "allow-splunk" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["8000", "8089", "9997"] 
-    } 
-    
-    source_ranges = split(",", var.general.ip_whitelist) 
-} 
-
-resource "google_compute_firewall" "allow_grpc" { 
-
-    description =  "Allow gRPC ports from the IP whitelistWinRM" 
-    name    = "allow-grcp" 
-    network = module.vpc.network_name 
-
-    allow { 
-        protocol = "tcp" 
-        ports    = ["50051"] 
-    } 
-    
-    source_ranges = split(",", var.general.ip_whitelist) 
-} 
-
-# Egress rule allowing all outbound traffic 
-resource "google_compute_firewall" "default_egress" { 
-    
-    name    = "firewall-egress-${var.general.key_name}-${var.general.attack_range_name}" 
-    network = module.vpc.network_name 
+# Firewall rule to allow internal communication
+resource "google_compute_firewall" "allow_internal" {
+  name    = "ar-allow-internal-${var.attack_range_id}"
+  network = google_compute_network.vpc.name
+  project = var.project_id
 
   allow {
-    protocol = "all"
+    protocol = "tcp"
+    ports    = ["0-65535"]
   }
 
-  direction         = "EGRESS"
-  destination_ranges = ["0.0.0.0/0"]
+  allow {
+    protocol = "udp"
+    ports    = ["0-65535"]
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+
+  source_ranges = ["10.0.0.0/16"]
 }
 
-resource "google_compute_firewall" "allow_internal_communication" {
-    description = "Allow all internal communication within the 10.0.1.0/24 subnet"
-    name    = "allow-internal-communication"
-    network = module.vpc.network_name
+# Firewall rule to allow SSH from IP whitelist to public subnet
+resource "google_compute_firewall" "allow_ssh_public" {
+  name    = "ar-allow-ssh-public-${var.attack_range_id}"
+  network = google_compute_network.vpc.name
+  project = var.project_id
 
-    allow {
-        protocol = "all"
-    }
+  allow {
+    protocol = "tcp"
+    ports    = ["22"]
+  }
 
-    source_ranges = ["10.0.1.0/24"]
+  source_ranges = [var.ip_whitelist]
+  target_tags   = ["router"]
+}
+
+# Firewall rule to allow WireGuard from IP whitelist to router
+resource "google_compute_firewall" "allow_wireguard" {
+  name    = "ar-allow-wireguard-${var.attack_range_id}"
+  network = google_compute_network.vpc.name
+  project = var.project_id
+
+  allow {
+    protocol = "udp"
+    ports    = ["51820"]
+  }
+
+  source_ranges = [var.ip_whitelist]
+  target_tags   = ["router"]
 }

@@ -1,177 +1,77 @@
-<p align="center">
-    <a href="https://github.com/splunk/attack_range/releases">
-        <img src="https://img.shields.io/github/v/release/splunk/attack_range" /></a>
-    <a href="https://github.com/splunk/attack_range/actions">
-        <img src="https://github.com/splunk/attack_range/actions/workflows/build_attack_destroy_aws.yml/badge.svg?branch=develop"/></a>
-    <a href="https://github.com/splunk/attack_range/graphs/contributors" alt="Contributors">
-        <img src="https://img.shields.io/github/contributors/splunk/attack_range" /></a>
-    <a href="https://github.com/splunk/attack_range/stargazers">
-        <img src="https://img.shields.io/github/stars/splunk/attack_range?style=social" /></a>
-</p>
-
-> ⚠️ **Important:** After careful consideration, we have decided to deprecate the local deployment in Attack Range due to ongoing challenges with VirtualBox and Vagrant. We will concentrate our development efforts on the cloud providers AWS, Azure, and GCP. For local cyber range needs, we recommend using [Ludus](https://docs.ludus.cloud/) along with the [Attack Range environment](https://docs.ludus.cloud/docs/environment-guides/splunk-attack-range) it offers.
-
-# Splunk Attack Range ⚔️
+# Splunk Attack Range
 ![Attack Range Log](docs/attack_range.png)
-The Splunk Attack Range is an open-source project maintained by the Splunk Threat Research Team. It builds instrumented cloud (AWS, Azure, GCP), simulates attacks, and forwards the data into a Splunk instance. This environment can then be used to develop and test the effectiveness of detections. 
 
-## Purpose 🛡
-The Attack Range is a detection development platform, which solves three main challenges in detection engineering:
-* The user is able to quickly build a small lab infrastructure as close as possible to a production environment.
-* The Attack Range performs attack simulation using different engines such as Atomic Red Team or Caldera in order to generate real attack data. 
-* It integrates seamlessly into any Continuous Integration / Continuous Delivery (CI/CD) pipeline to automate the detection rule testing process.  
+The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP), simulates attacks, and forwards data into Splunk for detection development and testing.
 
-## Docs
-The Attack Range Documentation can be found [here](https://attack-range.readthedocs.io/en/latest/).
+**What it does:**
 
-## Installation 🏗
+- **Build labs** — Deploy a small, production-like lab (Splunk, Windows/Linux servers, optional Kali, Zeek, etc.) via Terraform and Ansible.
+- **Simulate attacks** — Run Atomic Red Team (and other) techniques to generate real telemetry.
+- **Share access** — Use WireGuard VPN; generate additional client configs to share the range with others.
 
-### [Using Docker](https://github.com/splunk/attack_range/wiki/Using-Docker)
+---
 
-Attack Range in AWS:
+## Getting started
 
-```
-docker pull splunk/attack_range
-docker run -it splunk/attack_range
-aws configure
-python attack_range.py configure
-```
+**Preferred: Docker Compose**
 
-To install directly on Linux, or MacOS follow [these](https://attack-range.readthedocs.io/en/latest/Attack_Range_AWS.html#) instructions.
+1. **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/). Configure your cloud provider (AWS, Azure, or GCP) and mount credentials as below.
 
-If deploying in AWS, you may need to press [this button](https://console.aws.amazon.com/servicequotas/home/services/vpc/quotas/L-2AFB9258) and request a quota increase to 16 security groups per network interface.
+2. **Clone and start:**
 
-## Architecture 🏯
-![Logical Diagram](docs/attack_range_architecture.png)
+   ```bash
+   git clone <repo-url>
+   cd attack_range_2
+   docker compose -f docker/docker-compose.yml up -d
+   ```
 
-The deployment of Attack Range consists of:
+3. **Use the app or API:**
 
-- Windows Domain Controller
-- Windows Server
-- Windows Workstation
-- A Kali Machine
-- Splunk Server
-- Splunk SOAR Server
-- Nginx Server
-- Linux Server
-- Zeek Server
-- Snort Server
+   - **Web app:** open [http://localhost:4321](http://localhost:4321) — build/destroy ranges, view status, run simulations, share access.
+   - **API:** [http://localhost:5000](http://localhost:5000) — REST API; interactive docs at [http://localhost:5000/openapi/swagger](http://localhost:5000/openapi/swagger).
 
-Which can be added/removed/configured using [attack_range.yml](https://github.com/splunk/attack_range/blob/develop/attack_range.yml). 
+4. **Build a range (two steps):**
 
-## Logging
-The following log sources are collected from the machines:
+   - In the app: pick a template (e.g. `aws/splunk_minimal_aws`) and start the build. When status is *Waiting for VPN*, download the WireGuard config, connect with WireGuard, then continue the build.
+   - Or via API: `POST /attack-range/build` with `{"template": "aws/splunk_minimal_aws"}`, poll `GET /attack-range/status/<id>`, use the returned WireGuard config, connect, then `POST /attack-range/build` with `{"attack_range_id": "<id>"}`.
 
-- Windows Event Logs (```index = win```)
-- Sysmon Logs (```index = win```)
-- Powershell Logs (```index = win```)
-- Aurora EDR (```index = win```)
-- Sysmon for Linux Logs (```index = unix```)
-- Nginx logs (```index = proxy```)
-- Network Logs with Splunk Stream (```index = main```)
-- Attack Simulation Logs from Atomic Red Team and Caldera (```index = attack```)
-- Zeek Logs (```index = zeek```)
-- Snort Logs (```index = snort```)
-- Cisco Secure Endpoint Logs (```index = cisco_secure_endpoint```)
-- CrowdStrike Falcon Logs (```index = crowdstrike_falcon```)
-- Carbon Black Logs (```index = carbon_black_cloud```)
+5. **CLI in Docker (optional):**
 
-## Running 🏃‍♀️
-Attack Range supports different actions:
+   ```bash
+   docker compose -f docker/docker-compose.yml run --rm --profile cli attack_range build -t aws/splunk_minimal_aws
+   ```
 
-### Configure Attack Range
-```
-python attack_range.py configure
-```
+   Other actions: `destroy`, `simulate`, `share`. See [Detailed documentation](https://attack-range.readthedocs.io/) for CLI usage and flags.
 
-### Build Attack Range
-```
-python attack_range.py build
-```
+---
 
-### Show Attack Range Infrastructure
-```
-python attack_range.py show
-```
+## Ways to run
 
-### Perform Attack Simulations with Atomic Red Team or PurpleSharp
-```
-python attack_range.py simulate -e ART -te T1003.001 -t ar-win-ar-ar-0
+| Method | Use case |
+|-------|----------|
+| **Docker Compose** (recommended) | Run API + web app + optional CLI with one `docker compose`; no local Python/Ansible/Terraform. |
+| **Web app** | Build, destroy, simulate, and share via the UI at port 4321. |
+| **REST API** | Automate from scripts or CI; full OpenAPI docs at `/openapi/swagger`. |
+| **CLI** | `attack_range.py build | destroy | simulate | share` for terminal-based workflows. |
 
-python attack_range.py simulate -e PurpleSharp -te T1003.001 -t ar-win-ar-ar-0
-```
+---
 
-### Destroy Attack Range
-```
-python attack_range.py destroy
-```
+## Documentation
 
-### Stop Attack Range
-```
-python attack_range.py stop
-```
+- **Full docs (Read the Docs):** [https://attack-range.readthedocs.io/](https://attack-range.readthedocs.io/)
+- Chapters: **Getting Started**, **Configuration**, **Networking**, **Sharing**, **Templates**, **Ansible Roles**
 
-### Resume Attack Range
-```
-python attack_range.py resume
-```
+---
 
-### Dump Log Data from Attack Range
-```
-python attack_range.py dump --file_name attack_data/dump.log --search 'index=win' --earliest 2h
-```
+## Quick reference
 
-### Replay Dumps into Attack Range Splunk Server
-```
-python attack_range.py replay --file_name attack_data/dump.log --source test --sourcetype test
-```
+- **Configs:** Each range has a config in `config/<attack_range_id>.yml`. Templates live in `templates/{aws,azure,gcp}/`.
+- **Credentials:** Set up `~/.aws`, `~/.azure`, or `~/.config/gcloud` and mount them into the containers (see `docker/docker-compose.yml`).
+- **Support:** [GitHub issues](https://github.com/splunk/attack_range/issues) and [CONTRIBUTING](docs/CONTRIBUTING.md).
 
-## Features 💍
-- [Splunk Server](https://github.com/splunk/attack_range/wiki/Splunk-Server)
-  * Indexing of Microsoft Event Logs, PowerShell Logs, Sysmon Logs, DNS Logs, ...
-  * Preconfigured with multiple TAs for field extractions
-  * Out of the box Splunk detections with Enterprise Security Content Update ([ESCU](https://splunkbase.splunk.com/app/3449/)) App
-  * Preinstalled Machine Learning Toolkit ([MLTK](https://splunkbase.splunk.com/app/2890/))
-  * pre-indexed BOTS datasets
-  * Splunk UI available through port 8000 with user admin
-  * ssh connection over configured ssh key
+---
 
-- [Splunk Enterprise Security](https://splunkbase.splunk.com/app/263/)
-  * [Splunk Enterprise Security](https://splunkbase.splunk.com/app/263/) is a premium security solution requiring a paid license.
-  * Enable or disable [Splunk Enterprise Security](https://splunkbase.splunk.com/app/263/) in [attack_range.yml](https://github.com/splunk/attack_range/blob/develop/attack_range.yml)
-  * Purchase a license, download it and store it in the apps folder to use it.
-
-- [Splunk SOAR](https://www.splunk.com/en_us/software/splunk-security-orchestration-and-automation.html)
-  * [Splunk SOAR](https://www.splunk.com/en_us/software/splunk-security-orchestration-and-automation.html) is a Security Orchestration and Automation platform
-  * For a free development license (100 actions per day) register [here](https://my.phantom.us/login/?next=/)
-  * Enable or disable [Splunk SOAR](https://www.splunk.com/en_us/software/splunk-security-orchestration-and-automation.html) in [attack_range.yml](https://github.com/splunk/attack_range/blob/develop/attack_range.yml)
-
-- [Windows Domain Controller & Window Server & Windows 10 Client](https://github.com/splunk/attack_range/wiki/Windows-Infrastructure)
-  * Can be enabled, disabled and configured over [attack_range.yml](https://github.com/splunk/attack_range/blob/develop/attack_range.yml)
-  * Collecting of Microsoft Event Logs, PowerShell Logs, Sysmon Logs, DNS Logs, ...
-  * Sysmon log collection with customizable Sysmon configuration
-  * RDP connection over port 3389 with user Administrator
-
-- [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team)
-  * Attack Simulation with [Atomic Red Team](https://github.com/redcanaryco/atomic-red-team)
-  * Will be automatically installed on target during first execution of simulate
-  * Atomic Red Team already uses the new Mitre sub-techniques
-
-- [PurpleSharp](https://github.com/mvelazc0/PurpleSharp)
-  * Native adversary simulation support with [PurpleSharp](https://github.com/mvelazc0/PurpleSharp)
-  * Will be automatically downloaded on target during first execution of simulate
-  * Supports two parameters **-st** for comma separated ATT&CK techniques and **-sp** for a simulation playbook
-
-- [Kali Linux](https://www.kali.org/)
-  * Preconfigured Kali Linux machine for penetration testing
-  * ssh connection over configured ssh key
-
-- [Caldera](https://github.com/mitre/caldera)
-  * Attack Simulation with [Caldera](https://github.com/mitre/caldera)
-  * Can be enabled, disabled and configured over [attack_range.yml](https://github.com/splunk/attack_range/blob/develop/attack_range.yml)
-
-
-## Support 📞
+## Support 
 Please use the [GitHub issue tracker](https://github.com/splunk/attack_range/issues) to submit bugs or request features.
 
 If you have questions or need support, you can:
@@ -180,8 +80,12 @@ If you have questions or need support, you can:
 * Post a question to [Splunk Answers](http://answers.splunk.com)
 * If you are a Splunk Enterprise customer with a valid support entitlement contract and have a Splunk-related question, you can also open a support case on the https://www.splunk.com/ support portal
 
-## Contributing 🥰
+---
+
+## Contributing 
 We welcome feedback and contributions from the community! Please see our [contribution guidelines](docs/CONTRIBUTING.md) for more information on how to get involved.
+
+---
 
 ## Author
 * [Jose Hernandez](https://twitter.com/_josehelps)

@@ -1,5 +1,0 @@
----
-- name: Change hostname [Caldera]
-  become: true
-  ansible.builtin.hostname:
-    name: "{{ caldera_server.hostname }}"

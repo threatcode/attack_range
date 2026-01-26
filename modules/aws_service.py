@@ -179,16 +179,37 @@ def check_s3_bucket(bucket_name):
     return True
 
 
+def check_dynamodb_table(table_name, region):
+    """Check if a DynamoDB table exists."""
+    client = boto3.client('dynamodb', region_name=region)
+    try:
+        response = client.describe_table(TableName=table_name)
+        return response['Table']['TableStatus'] in ['ACTIVE', 'CREATING', 'UPDATING']
+    except client.exceptions.ResourceNotFoundException:
+        return False
+    except Exception as e:
+        return False
+
+
 def create_s3_bucket(bucket_name, region, logger):
     client = boto3.client("s3", region_name=region)
-    location = {'LocationConstraint': region}
     
-    try:
-        response = client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration=location)
-    except Exception as e:
-        logger.error("Couldn't create S3 bucket with name " + bucket_name)
-        logger.error(e)
-        sys.exit(1)
+    # us-east-1 doesn't require LocationConstraint
+    if region == 'us-east-1':
+        try:
+            response = client.create_bucket(Bucket=bucket_name)
+        except Exception as e:
+            logger.error("Couldn't create S3 bucket with name " + bucket_name)
+            logger.error(e)
+            sys.exit(1)
+    else:
+        location = {'LocationConstraint': region}
+        try:
+            response = client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration=location)
+        except Exception as e:
+            logger.error("Couldn't create S3 bucket with name " + bucket_name)
+            logger.error(e)
+            sys.exit(1)
 
     logger.info("Created S3 bucket with name " + bucket_name)
 

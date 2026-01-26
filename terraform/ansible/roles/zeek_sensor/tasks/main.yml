@@ -1,3 +1,0 @@
----
-- include_tasks: zeek.yml
-- include_tasks: splunkuf.yml

@@ -1,27 +1,26 @@
-# Attack Range Docs
+# Attack Range Documentation
 
-The Splunk Attack Range is an open-source project maintained by the Splunk Threat Research Team. It builds instrumented cloud and local environments, simulates attacks, and forwards the data into a Splunk instance. This environment can then be used to develop and test the effectiveness of detections.
+The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP), simulates attacks, and forwards data into Splunk for detection development and testing.
 
-The Attack Range is a detection development platform, which solves three main challenges in detection engineering:
-* The user is able to quickly build a small lab infrastructure as close as possible to a production environment.
-* The Attack Range performs attack simulation using different engines such as Atomic Red Team or Caldera in order to generate real attack data. 
-* It integrates seamlessly into any Continuous Integration / Continuous Delivery (CI/CD) pipeline to automate the detection rule testing process.  
+The preferred way to run Attack Range is **Docker Compose**, which starts the web app and API (and optionally the CLI) without installing Python, Ansible, or Terraform locally.
 
 ```{toctree}
-:caption: 'Contents:'
+:caption: Contents
 :maxdepth: 2
 
-Attack Range AWS <Attack_Range_AWS>
-Attack Range Azure <Attack_Range_Azure>
-Attack Range GCP <Attack_Range_GCP>
-Attack Range Cloud <Attack_Range_Cloud>
-Control Attack Range <Control_Attack_Range>
-Attack Range Config <Attack_Range_Config>
-Attack Simulation <Attack_Simulation>
-Attack Data <Attack_Data>
-Attack Range Features <Attack_Range_Features>
-CapAttack <Cap_Attack>
-Cost Explorer <Cost_Explorer>
-Total_Replay <Total_Replay>
-
+getting-started
+configuration
+networking
+sharing
+templates
+ansible-roles
 ```
+
+## Quick links
+
+- **Getting Started** — Docker Compose, web app, API, and CLI.
+- **Configuration** — Config file structure and provider options.
+- **Networking** — Two-phase build and connectivity; includes a **WireGuard VPN** section (why WireGuard, server/client, config storage, official clients, sharing).
+- **Sharing** — Giving others access with additional WireGuard configs.
+- **Templates** — Built-in templates and custom template layout.
+- **Ansible Roles** — Bundled roles (Atomic Red Team, CAP Attack, data replay, PurpleSharp) and how they are used.

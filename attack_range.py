@@ -1,349 +1,333 @@
+#!/usr/bin/env python3
+"""
+Simple script to execute AttackRangeController commands.
+"""
+
 import os
 import sys
 import argparse
+import glob
+import yaml
 
-from modules.config_handler import ConfigHandler
-from modules.aws_controller import AwsController
-from modules.azure_controller import AzureController
-from modules.gcp_controller import GCPController
-from modules import configuration
+from attack_range.attack_range_controller import AttackRangeController
+from attack_range.utils import prepare_config_from_template, resolve_template_path
 
-# need to set this ENV var due to a OSX High Sierra forking bug
-# see this discussion for more details: https://github.com/ansible/ansible/issues/34056#issuecomment-352862252
 os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
 
-
-def init(args):
-    config_path = args.config
-    print(
-        """
-                              __
-                            .d$$b
-                          .' TO$;\\
-                         /  : TP._;
-                        / _.;  :Tb|
-                       /   /   ;j$j
-                   _.-"       d$$$$
-                 .' ..       d$$$$;
-                /  /P'      d$$$$P. |\\
-               /   "      .d$$$P' |\\^"l
-             .'           `T$P^\"\"\"\"\"  :
-         ._.'      _.'                ;
-      `-.-".-'-' ._.       _.-"    .-"
-    `.-" _____  ._              .-"
-   -(.g$$$$$$$b.              .'
-     ""^^T$$$P^)            .(:
-       _/  -"  /.'         /:/;
-    ._.'-'`-'  ")/         /;/;
- `-.-"..--""   " /         /  ;
-.-" ..--""        -'          :
-..--""--.-"         (\\      .-(\\
-  ..--""              `-\\(\\/;`
-    _.                      :
-                            ;`-
-                           :\\
-                           ;  bug
-
-By: Splunk Threat Research Team [STRT] - research@splunk.com
-
+def load_config(config_path: str) -> dict:
     """
-    )
-
-    # parse config
-    config = ConfigHandler.read_config(config_path)
-    ConfigHandler.validate_config(config)
-
-    if config["general"]["cloud_provider"] == "aws":
-        config.pop("azure")
-        config.pop("gcp")
-        controller = AwsController(config)
-    elif config["general"]["cloud_provider"] == "azure":
-        config.pop("aws")
-        config.pop("gcp")
-        controller = AzureController(config)
-    elif config["general"]["cloud_provider"] == "gcp":
-        config.pop("aws")
-        config.pop("azure")
-        controller = GCPController(config)
-    return controller
+    Load configuration from YAML file.
+    
+    :param config_path: Path to the configuration file
+    :return: Configuration dictionary
+    """
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f)
+        return config
+    except FileNotFoundError:
+        print(f"Error: Configuration file not found: {config_path}")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"Error: Failed to parse YAML configuration: {e}")
+        sys.exit(1)
 
 
-def simulate(args):
-    controller = init(args)
-    controller.simulate(args.engine, args.target, args.technique, args.playbook)
+def build_action(args):
+    """Execute build action."""
+    # Template is required
+    if not args.template:
+        print("Error: --template is required. Please specify a template from the templates folder.")
+        templates_dir = os.path.join(os.path.dirname(__file__), "templates")
+        if os.path.exists(templates_dir):
+            templates = [f for f in os.listdir(templates_dir) if f.endswith(('.yml', '.yaml'))]
+            if templates:
+                print("\nAvailable templates:")
+                for t in sorted(templates):
+                    print(f"  - {t}")
+        sys.exit(1)
+    
+    # Set up directories
+    base_dir = os.path.dirname(__file__)
+    templates_dir = os.path.join(base_dir, "templates")
+    config_dir = os.path.join(base_dir, "config")
+    
+    try:
+        # Prepare config from template (loads template, adds metadata, saves to config folder)
+        config, config_path, attack_range_id = prepare_config_from_template(
+            args.template,
+            templates_dir,
+            config_dir,
+            generate_id=True
+        )
+        
+        print(f"Prepared config from template: {args.template}")
+        print(f"Attack Range ID: {attack_range_id}")
+        print(f"Config saved to: {config_path}")
+        
+        # Create controller with prepared config
+        controller = AttackRangeController(config, config_path=config_path)
+        controller.build()
+        
+    except FileNotFoundError as e:
+        print(f"Error: Template file not found: {e}")
+        # List available templates
+        if os.path.exists(templates_dir):
+            # Check provider subdirectories
+            templates = []
+            for provider in ["aws", "azure", "gcp"]:
+                provider_dir = os.path.join(templates_dir, provider)
+                if os.path.exists(provider_dir):
+                    provider_templates = [f for f in os.listdir(provider_dir) if f.endswith(('.yml', '.yaml'))]
+                    templates.extend([f"{provider}/{t}" for t in provider_templates])
+            # Also check root templates folder
+            if os.path.exists(templates_dir):
+                root_templates = [f for f in os.listdir(templates_dir) if f.endswith(('.yml', '.yaml'))]
+                templates.extend(root_templates)
+            
+            if templates:
+                print("\nAvailable templates:")
+                for t in sorted(set(templates)):
+                    print(f"  - {t}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: Failed to prepare config from template: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
 
 
-def dump(args):
-    controller = init(args)
-    controller.dump(args.file_name, args.search, args.earliest, args.latest)
-
-
-def replay(args):
-    controller = init(args)
-    controller.replay(args.file_name, args.index, args.sourcetype, args.source)
-
-
-def build(args):
-    controller = init(args)
-    controller.build()
-
-
-def destroy(args):
-    controller = init(args)
+def destroy_action(args):
+    """Execute destroy action."""
+    config_dir = os.path.join(os.path.dirname(__file__), "config")
+    
+    # If config not specified, check config folder
+    if not args.config:
+        # Find all .yml files in config folder
+        yml_files = glob.glob(os.path.join(config_dir, "*.yml"))
+        
+        if not yml_files:
+            print("Error: No config files found in config folder.")
+            print("Please specify a config file using --config")
+            sys.exit(1)
+        
+        if len(yml_files) == 1:
+            # Only one file exists, use it automatically
+            config_path = yml_files[0]
+            config_name = os.path.basename(config_path)
+            print(f"Found single config file: {config_name}")
+        else:
+            # Multiple files exist, require user to specify
+            print(f"Error: Multiple config files found ({len(yml_files)} files).")
+            print("Please specify which config file to use with --config")
+            print("\nAvailable config files:")
+            for yml_file in sorted(yml_files):
+                config_name = os.path.basename(yml_file)
+                print(f"  - {config_name}")
+            sys.exit(1)
+    else:
+        # User specified config file
+        config_path = args.config
+        
+        # If only a filename is provided (no directory), look in config folder
+        if os.path.dirname(config_path) == '' or os.path.dirname(config_path) == '.':
+            config_path = os.path.join(config_dir, os.path.basename(config_path))
+        
+        # Check if config file exists
+        if not os.path.exists(config_path):
+            print(f"Error: Config file not found: {config_path}")
+            sys.exit(1)
+    
+    # Load config from the specified file
+    config = load_config(config_path)
+    # Get absolute path to config file
+    config_path = os.path.abspath(config_path)
+    controller = AttackRangeController(config, config_path=config_path)
     controller.destroy()
 
 
-def stop(args):
-    controller = init(args)
-    instance_ids = (
-        [id.strip() for id in args.instance_ids.split(",")]
-        if args.instance_ids
-        else None
-    )
-    controller.stop(instance_ids)
-
-
-def resume(args):
-    controller = init(args)
-    instance_ids = (
-        [id.strip() for id in args.instance_ids.split(",")]
-        if args.instance_ids
-        else None
-    )
-    controller.resume(instance_ids)
-
-
-def configure(args):
-    configuration.new(args.config)
-
-
-def show(args):
-    controller = init(args)
-    controller.show()
-
-
-def create_remote_backend(args):
-    controller = init(args)
-    controller.create_remote_backend(args.backend_name)
-
-
-def delete_remote_backend(args):
-    controller = init(args)
-    controller.delete_remote_backend(args.backend_name)
-
-
-def init_remote_backend(args):
-    controller = init(args)
-    controller.init_remote_backend(args.backend_name)
-
-
-def cap_attack(args):
-    controller = init(args)
-    if args.start:
-        controller.start_cap_attack(args.target)
-    elif args.stop:
-        controller.stop_cap_attack(args.target)
+def simulate_action(args):
+    """Execute simulate action."""
+    config_dir = os.path.join(os.path.dirname(__file__), "config")
+    
+    # If config not specified, check config folder
+    if not args.config:
+        # Find all .yml files in config folder
+        yml_files = glob.glob(os.path.join(config_dir, "*.yml"))
+        
+        if not yml_files:
+            print("Error: No config files found in config folder.")
+            print("Please specify a config file using --config")
+            sys.exit(1)
+        
+        if len(yml_files) == 1:
+            # Only one file exists, use it automatically
+            config_path = yml_files[0]
+            config_name = os.path.basename(config_path)
+            print(f"Found single config file: {config_name}")
+        else:
+            # Multiple files exist, require user to specify
+            print(f"Error: Multiple config files found ({len(yml_files)} files).")
+            print("Please specify which config file to use with --config")
+            print("\nAvailable config files:")
+            for yml_file in sorted(yml_files):
+                config_name = os.path.basename(yml_file)
+                print(f"  - {config_name}")
+            sys.exit(1)
     else:
-        print("Please specify either --start or --stop")
+        # User specified config file
+        config_path = args.config
+        
+        # If only a filename is provided (no directory), look in config folder
+        if os.path.dirname(config_path) == '' or os.path.dirname(config_path) == '.':
+            config_path = os.path.join(config_dir, os.path.basename(config_path))
+        
+        # Check if config file exists
+        if not os.path.exists(config_path):
+            print(f"Error: Config file not found: {config_path}")
+            sys.exit(1)
+    
+    # Parse techniques (comma-separated)
+    techniques = [t.strip() for t in args.techniques.split(",") if t.strip()]
+    if not techniques:
+        print("Error: No techniques specified. Please provide at least one technique ID.")
+        sys.exit(1)
+    
+    # Load config from the specified file
+    config = load_config(config_path)
+    # Get absolute path to config file
+    config_path = os.path.abspath(config_path)
+    controller = AttackRangeController(config, config_path=config_path)
+    controller.simulate(args.target, techniques)
 
 
-def main(args):
-    """
-    main function parses the arguments passed to the script and calls the respctive method.
+def share_action(args):
+    """Execute share action."""
+    config_dir = os.path.join(os.path.dirname(__file__), "config")
 
-    :param args: Arguments passed by the user on command line while calling the script.
-    :return: returns the output of the function called.
-    """
-    # grab arguments
+    if not args.config:
+        yml_files = glob.glob(os.path.join(config_dir, "*.yml"))
+        if not yml_files:
+            print("Error: No config files found in config folder.")
+            print("Please specify a config file using --config")
+            sys.exit(1)
+        if len(yml_files) > 1:
+            print("Error: Multiple config files found. Please specify which to use with --config")
+            print("\nAvailable config files:")
+            for yml_file in sorted(yml_files):
+                print(f"  - {os.path.basename(yml_file)}")
+            sys.exit(1)
+        config_path = yml_files[0]
+    else:
+        config_path = args.config
+        if os.path.dirname(config_path) in ('', '.'):
+            config_path = os.path.join(config_dir, os.path.basename(config_path))
+        if not os.path.exists(config_path):
+            print(f"Error: Config file not found: {config_path}")
+            sys.exit(1)
+
+    config = load_config(config_path)
+    config_path = os.path.abspath(config_path)
+    controller = AttackRangeController(config, config_path=config_path)
+
+    try:
+        config_content = controller.share(args.name)
+        print("\n" + "=" * 60)
+        print(f"WireGuard config for '{args.name}' (saved to general.sharing):")
+        print("=" * 60)
+        print(config_content)
+        print("=" * 60)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+def main():
+    """Main entry point for the script."""
     parser = argparse.ArgumentParser(
-        description="Use `attack_range.py action -h` to get help with any Attack Range action"
+        description="Simple script to execute AttackRangeController commands"
     )
-    parser.add_argument(
+    
+    subparsers = parser.add_subparsers(
+        title="actions",
+        dest="action",
+        help="Available actions",
+        required=True
+    )
+    
+    # Build action
+    build_parser = subparsers.add_parser(
+        "build",
+        help="Build the attack range infrastructure"
+    )
+    build_parser.add_argument(
+        "-t",
+        "--template",
+        required=True,
+        help="Template from the templates folder (e.g., splunk_minimal_aws, splunk_windows_aws)",
+    )
+    build_parser.set_defaults(func=build_action)
+    
+    # Destroy action
+    destroy_parser = subparsers.add_parser(
+        "destroy",
+        help="Destroy the attack range infrastructure"
+    )
+    destroy_parser.add_argument(
         "-c",
         "--config",
-        required=False,
-        default="attack_range.yml",
-        help="path to the configuration file of the attack range",
+        help="Path to the config file (optional if only one config exists in config/ folder)",
     )
-    parser.set_defaults(func=lambda _: parser.print_help())
-
-    actions_parser = parser.add_subparsers(title="attack Range actions", dest="action")
-    configure_parser = actions_parser.add_parser(
-        "configure", help="configure a new attack range"
+    destroy_parser.set_defaults(func=destroy_action)
+    
+    # Simulate action
+    simulate_parser = subparsers.add_parser(
+        "simulate",
+        help="Run Atomic Red Team techniques against a target server"
     )
-    build_parser = actions_parser.add_parser(
-        "build", help="builds attack range instances"
-    )
-    simulate_parser = actions_parser.add_parser(
-        "simulate", help="simulates attack techniques"
-    )
-    cap_attack_parser = actions_parser.add_parser(
-        "cap_attack", help="starts and stops CAP Attack"
-    )
-    destroy_parser = actions_parser.add_parser(
-        "destroy", help="destroy attack range instances"
-    )
-    stop_parser = actions_parser.add_parser("stop", help="stops attack range instances")
-    resume_parser = actions_parser.add_parser(
-        "resume", help="resumes previously stopped attack range instances"
-    )
-    packer_parser = actions_parser.add_parser("packer", help="create golden images")
-    show_parser = actions_parser.add_parser("show", help="list machines")
-    dump_parser = actions_parser.add_parser(
-        "dump", help="dump locally logs from attack range instances"
-    )
-    replay_parser = actions_parser.add_parser(
-        "replay", help="replay dumps into the splunk server"
-    )
-    create_remote_backend_parser = actions_parser.add_parser(
-        "create_remote_backend", help="Create a Remote Backend"
-    )
-    delete_remote_backend_parser = actions_parser.add_parser(
-        "delete_remote_backend", help="Delete a Remote Backend"
-    )
-    init_remote_backend_parser = actions_parser.add_parser(
-        "init_remote_backend", help="Init a Remote Backend"
-    )
-
-    # Build arguments
-    build_parser.set_defaults(func=build)
-
-    # Destroy arguments
-    destroy_parser.set_defaults(func=destroy)
-
-    # Stop arguments
-    stop_parser.set_defaults(func=stop)
-    stop_parser.add_argument(
-        "--instance_ids",
-        required=False,
-        type=str,
-        help="comma-separated list of instance IDs to stop",
-    )
-
-    # Resume arguments
-    resume_parser.set_defaults(func=resume)
-    resume_parser.add_argument(
-        "--instance_ids",
-        required=False,
-        type=str,
-        help="comma-separated list of instance IDs to resume",
-    )
-
-    # Configure arguments
-    configure_parser.add_argument(
-        "-c",
-        "--config",
-        required=False,
-        type=str,
-        default="attack_range.yml",
-        help="provide path to write configuration to",
-    )
-    configure_parser.set_defaults(func=configure)
-
-    # Simulation arguments
     simulate_parser.add_argument(
-        "-e",
-        "--engine",
-        required=False,
-        default="ART",
-        help="simulation engine to use. Available options are: PurpleSharp and ART (default)",
+        "-c",
+        "--config",
+        help="Path to the config file (optional if only one config exists in config/ folder)",
     )
     simulate_parser.add_argument(
         "-t",
         "--target",
         required=True,
-        help="target for attack simulation. Use the name of the aws EC2 name",
+        help="Target server name (must match a server name in attack_range config)",
     )
     simulate_parser.add_argument(
         "-te",
-        "--technique",
-        required=False,
-        type=str,
-        default="",
-        help="comma delimited list of MITRE ATT&CK technique ID to simulate in the "
-        "attack_range, example: T1117, T1118",
-    )
-    simulate_parser.add_argument(
-        "-p",
-        "--playbook",
-        required=False,
-        type=str,
-        default="",
-        help="file path for a simulation playbook",
-    )
-
-    simulate_parser.set_defaults(func=simulate)
-
-    cap_attack_parser.add_argument(
-        "-t",
-        "--target",
+        "--techniques",
         required=True,
-        help="target for CAP Attack. Use the name of the Windows instance",
+        help="Comma-separated list of MITRE ATT&CK technique IDs (e.g., T1003.001,T1059.003)",
     )
-    cap_attack_parser.add_argument(
-        "--start", action="store_true", help="start CAP Attack threat capture"
-    )
-    cap_attack_parser.add_argument(
-        "--stop", action="store_true", help="stop CAP Attack threat capture"
-    )
-    cap_attack_parser.set_defaults(func=cap_attack)
+    simulate_parser.set_defaults(func=simulate_action)
 
-    # Dump  Arguments
-    dump_parser.add_argument(
-        "-fn", "--file_name", required=True, help="file name of the attack_data"
+    # Share action
+    share_parser = subparsers.add_parser(
+        "share",
+        help="Share the attack range: generate a new WireGuard config for the given name, run playbooks, save to general.sharing",
     )
-    dump_parser.add_argument("--search", required=True, help="splunk search to export")
-    dump_parser.add_argument(
-        "--earliest", required=True, help="earliest time of the splunk search"
+    share_parser.add_argument(
+        "-c",
+        "--config",
+        help="Path to the config file (optional if only one config exists in config/ folder)",
     )
-    dump_parser.add_argument(
-        "--latest",
-        required=False,
-        default="now",
-        help="latest time of the splunk search",
+    share_parser.add_argument(
+        "-n",
+        "--name",
+        required=True,
+        help="Share name (e.g. 'alice') — used as the new WireGuard client name",
     )
-    dump_parser.set_defaults(func=dump)
+    share_parser.set_defaults(func=share_action)
 
-    # Replay Arguments
-    replay_parser.add_argument(
-        "-fn", "--file_name", required=True, help="file name of the attack_data"
-    )
-    replay_parser.add_argument(
-        "--source", required=True, help="source of replayed data"
-    )
-    replay_parser.add_argument(
-        "--sourcetype", required=True, help="sourcetype of replayed data"
-    )
-    replay_parser.add_argument(
-        "--index", required=False, default="test", help="index of replayed data"
-    )
-    replay_parser.set_defaults(func=replay)
-
-    # Show arguments
-    show_parser.set_defaults(func=show, machines=True)
-
-    # Create Remote Backend
-    create_remote_backend_parser.add_argument(
-        "-bn", "--backend_name", required=True, help="name of the remote backend"
-    )
-    create_remote_backend_parser.set_defaults(func=create_remote_backend)
-
-    # Delete Remote Backend
-    delete_remote_backend_parser.add_argument(
-        "-bn", "--backend_name", required=True, help="name of the remote backend"
-    )
-    delete_remote_backend_parser.set_defaults(func=delete_remote_backend)
-
-    # Init Remote Backend
-    init_remote_backend_parser.add_argument(
-        "-bn", "--backend_name", required=True, help="name of the remote backend"
-    )
-    init_remote_backend_parser.set_defaults(func=init_remote_backend)
-
-    # # parse them
     args = parser.parse_args()
-    return args.func(args)
+    args.func(args)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()

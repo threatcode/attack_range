@@ -1,4 +1,0 @@
----
-
-- include_tasks: config.yml
-  when: splunk_server.byo_splunk == "1"

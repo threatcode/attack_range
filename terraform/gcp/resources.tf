@@ -1,426 +1,332 @@
+locals {
+  linux_user_data_template = <<EOF
+#!/bin/bash
+set -e
+# Set password for %USERNAME% user
+# Create a temporary file to avoid shell quoting issues with special characters
+TMPFILE=$(mktemp)
+echo '%USERNAME%:%PASSWORD%' > "$TMPFILE"
+/usr/sbin/chpasswd < "$TMPFILE"
+rm -f "$TMPFILE"
 
-# Load network module to set up the VPC network and associated resources.
+# Verify password was set
+if [ $? -eq 0 ]; then
+  echo "Password set successfully for %USERNAME%"
+else
+  echo "Failed to set password for %USERNAME%" >&2
+  exit 1
+fi
+
+# Unlock the user account (important for Ubuntu cloud images)
+usermod -U %USERNAME% 2>/dev/null || true
+
+# Remove password expiration
+chage -E -1 -m 0 -M 99999 -I -1 -W 7 %USERNAME% 2>/dev/null || passwd -u %USERNAME% 2>/dev/null || true
+
+# Create a higher priority SSH config file to override cloud-init settings
+# Cloud-init creates /etc/ssh/sshd_config.d/60-cloudimg-settings.conf which disables password auth
+# We create 99-enable-password.conf which loads after it and overrides those settings
+cat > /etc/ssh/sshd_config.d/99-enable-password.conf <<'SSHCONF'
+PasswordAuthentication yes
+KbdInteractiveAuthentication yes
+PubkeyAuthentication yes
+UsePAM yes
+SSHCONF
+
+# Ensure the config directory exists and has correct permissions
+chmod 644 /etc/ssh/sshd_config.d/99-enable-password.conf
+
+# Restart SSH service
+systemctl restart sshd || service ssh restart
+
+# Wait a moment for SSH to fully restart
+sleep 2
+
+# Verify the configuration
+echo "SSH PasswordAuthentication (effective): $(sshd -T | grep -i passwordauthentication || echo 'check failed')"
+echo "User %USERNAME% account status: $(passwd -S %USERNAME% 2>/dev/null || echo 'unknown')"
+EOF
+
+  windows_user_data_template = <<EOF
+$admin = [adsi]("WinNT://./%USERNAME%, user")
+$admin.PSBase.Invoke("SetPassword", "${var.general.attack_range_password}")
+if ($?) {
+    Add-Content -Path C:\startup_log.txt -Value "Password set successfully for Administrator."
+} else {
+    Add-Content -Path C:\startup_log.txt -Value "Failed to set password for Administrator."
+}
+net user Administrator /active:yes
+if ($admin.AccountDisabled -eq $false) {
+    Add-Content -Path C:\startup_log.txt -Value "Administrator account enabled."
+} else {
+    Add-Content -Path C:\startup_log.txt -Value "Administrator account NOT enabled."
+}
+winrm quickconfig -q
+
+# Enable Debugging mode
+# winrm set winrm/config/service @{EnableDebugLogging="true"}
+
+# Increase Max Concurrent Requests
+winrm set winrm/config/service '@{MaxConcurrentUsers="50"}'
+
+# Increase Max Connections per Shell
+winrm set winrm/config/winrs '@{MaxShellsPerUser="50"}'
+
+# Increase Memory Limit per Shell
+# winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="4096"}'
+
+# Set operation timeout to 10 minutes
+winrm set winrm/config '@{MaxTimeoutms="3600000"}'
+# winrm set winrm/config/winrs '@{IdleTimeout="600000"}'
+
+# Increase the request queue limit
+# winrm set winrm/config/winrs '@{MaxProcessesPerShell="25"}'
+
+# Increase Max Concurrent Operations for WinRS
+# winrm set winrm/config/service '@{MaxConcurrentOperations="4294967295"}'
+# winrm set winrm/config/service '@{MaxConcurrentOperationsPerUser="4294967295"}'
+winrm set winrm/config/service '@{MaxConcurrentOperations="4294967295"; MaxConcurrentOperationsPerUser="4294967295"; MaxConnections="4294967295"}'
+winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="4096"; MaxProcessesPerShell="50"; IdleTimeout="3600000"}'
+
+winrm set winrm/config/service '@{AllowUnencrypted="true"}' 
+
+Set-Item -Path WSMan:\localhost\Service\AllowUnencrypted -Value true
+
+# Add the Ansible controller to trusted hosts
+Set-Item WSMan:\localhost\Client\TrustedHosts -Value "*" -Force
+
+# Enable KeepAlive for the HTTPS Listener
+if (Test-Path WSMan:\localhost\Service\KeepAlive) {
+    Write-Host "Keep alive true"
+    Set-Item -Path WSMan:\localhost\Service\KeepAlive -Value $true
+} else {
+    Write-Host "KeepAlive path does not exist."
+}
+
+winrm set winrm/config/service/auth '@{Basic="true"}'
+$ExternalIP = Invoke-RestMethod -Uri "http://ifconfig.me/ip"
+# $ExternalIP = (Invoke-WebRequest -uri http://metadata.google.internal/computeMetadata/v1/instances/external_ip -Headers @{"Metadata-Flavor"="Google"}) | Select-Object -ExpandProperty Content # Get external IP
+$InternalIP = (Get-NetIPAddress | Where-Object {$_.InterfaceAlias -like "*Ethernet*" -and $_.AddressFamily -eq 'IPv4'}).IPAddress  # Get internal IP
+
+# Use internal IP or hostname for the certificate
+$hostname = [System.Net.Dns]::GetHostName()
+# $Cert = New-SelfSignedCertificate -DnsName $hostname -CertStoreLocation "Cert:\LocalMachine\My"
+$Cert = New-SelfSignedCertificate -DnsName $hostname, $ExternalIP, $InternalIP -CertStoreLocation "Cert:\LocalMachine\My"  # Use external and internal IPs
+$CertDetails = @{
+  Thumbprint = $Cert.Thumbprint
+  Subject = $Cert.Subject
+  DnsNameList = $Cert.DnsNameList
+}
+$CertDetails | Out-File -FilePath C:\certificate_details.txt
+$Thumbprint = $Cert.Thumbprint
+
+# Check and create HTTP listener on port 5985
+$existingHttpListener = (winrm enumerate winrm/config/Listener | Select-String -Pattern "Transport=HTTP")
+if (-not $existingHttpListener) {
+    winrm create winrm/config/Listener?Address=*+Transport=HTTP+Port=5985
+    Write-Host "HTTP listener created on port 5985."
+} else {
+    Write-Host "HTTP listener already exists on port 5985."
+}
+
+# Check and create HTTPS listener on port 5986
+$existingHttpsListener = (winrm enumerate winrm/config/Listener | Select-String -Pattern "Transport=HTTPS")
+if (-not $existingHttpsListener) {
+    winrm create winrm/config/Listener?Address=*+Transport=HTTPS @{Hostname="$hostname"; CertificateThumbprint="$Thumbprint"}
+    Write-Host "HTTPS listener created on port 5986."
+} else {
+    Write-Host "HTTPS listener already exists on port 5986."
+}
+
+netsh advfirewall firewall add rule name="WinRM HTTP" protocol=TCP dir=in localport=5985 action=allow
+netsh advfirewall firewall add rule name="WinRM HTTPS" protocol=TCP dir=in localport=5986 action=allow
+
+# Add firewall rule for RDP (port 3389)
+netsh advfirewall firewall add rule name="RDP" protocol=TCP dir=in localport=3389 action=allow
+
+net stop winrm
+sc.exe config winrm start=auto
+
+# Set WinRM to restart automatically on failure
+sc.exe failure winrm reset= 0 actions= restart/5000/restart/5000/restart/5000
+
+# Define task name
+$taskName = "Restart WinRM Service"
+
+# Check if the task already exists
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+    # Remove the existing task
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+    Write-Host "Existing task '$taskName' removed."
+}
+
+# Define the action and trigger
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-Command "Restart-Service winrm"'
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5) -RepetitionDuration (New-TimeSpan -Days 365) # 1 year
+
+# Register the new task
+Register-ScheduledTask -Action $action -Trigger $trigger -TaskName $taskName -Description "Restarts WinRM if it crashes"
+
+Write-Host "Task '$taskName' created or recreated successfully."
+Get-ScheduledTask | Where-Object { $_.TaskName -eq "Restart WinRM Service" }
+
+net start winrm
+Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -value 0
+Enable-PSRemoting -SkipNetworkProfileCheck -Force
+
+# Get the system drive dynamically
+# $drive_letter = (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Used -gt 0 }).Name[0]
+# Get the drive letter of the first drive with free space
+$drive_letter = (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 0 }).Name[0]
+
+# Get the partition size details
+try {
+    # Get the drive letter of the first drive with free space
+    $drive_letter = (Get-PSDrive -PSProvider FileSystem | Where-Object { $_.Free -gt 0 }).Name[0]
+
+    # Get the partition size details
+    $size = Get-PartitionSupportedSize -DriveLetter $drive_letter
+    Write-Host "Size Left: Min = $($size.SizeMin), Max = $($size.SizeMax)"
+
+    # Check if the maximum available size is greater than or equal to 1GB
+    if ($size.SizeMax -ge (1GB)) {
+        # Ensure the new size is valid and larger than the current partition size
+        $currentPartitionSize = (Get-Partition -DriveLetter $drive_letter).Size
+        Write-Host "Current Partition Size: $currentPartitionSize bytes"
+
+        if ($size.SizeMax -gt $currentPartitionSize) {
+            try {
+                # Resize the partition to the maximum supported size
+                Resize-Partition -DriveLetter $drive_letter -Size $size.SizeMax
+                Write-Host "Partition resized to $($size.SizeMax) bytes."
+            } catch {
+                Write-Host "Error resizing partition: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Host "No resize needed. Maximum size is equal to or less than the current partition size."
+        }
+    } else {
+        Write-Host "Insufficient space to resize the partition. Maximum available is $($size.SizeMax) bytes. Minimum required is 1GB."
+    }
+} catch {
+    Write-Host "Error during partition resize operation: $($_.Exception.Message)"
+}
+winrm enumerate winrm/config/Listener | Out-File -FilePath C:\winrm_listener_status.txt
+EOF
+
+  # Image map - dynamically created from attack_range configuration
+  image_map = {
+    for k, v in data.google_compute_image.dynamic : k => v.self_link
+  }
+
+  # Check if zeek server should be enabled (if there's a server with zeek: true or name == "zeek")
+  zeek_server_enabled = length([
+    for server in var.attack_range : server 
+    if try(server.zeek, false) || server.name == "zeek"
+  ]) > 0
+
+  # Find the zeek server configuration
+  zeek_server_config = try(
+    [for server in var.attack_range : server if try(server.zeek, false) || server.name == "zeek"][0],
+    null
+  )
+
+  # Create a map of server names to priority numbers for packet mirroring
+  packet_mirror_priorities = {
+    for idx, server in var.attack_range :
+    server.name => 100 + idx
+    if try(server.zeek_monitor, false)
+  }
+}
+
+# Dynamic image data source - uses image_family and image_project from attack_range configuration
+data "google_compute_image" "dynamic" {
+  for_each = {
+    for server in var.attack_range : server.name => server
+    if try(server.image_family, null) != null && try(server.image_project, null) != null
+  }
+  family  = each.value.image_family
+  project = each.value.image_project
+}
+
+# Data source for router Ubuntu image (always Ubuntu 22.04 LTS)
+data "google_compute_image" "router_ubuntu" {
+  family  = "ubuntu-2204-lts"
+  project = "ubuntu-os-cloud"
+}
+
 module "networkModule" {
-  source  = "./modules/network"
-  general = var.general                   # General project variables
-  gcp     = var.gcp                       # GCP-specific project settings
-  cidrs   = var.cidrs                     # CIDR blocks for network subnets
+  source = "./modules/network"
+  attack_range_id = var.general.attack_range_id
+  project_id = var.gcp.project_id
+  region = var.gcp.region
+  router_private_ip = "10.0.1.10"
+  ip_whitelist = var.general.ip_whitelist
 }
 
-# IAM module to create and manage service accounts with appropriate roles.
-# module "iam" {
-#   source            = "./modules/iam"
-#   general           = var.general           # General project variables
-#   gcp               = var.gcp               # GCP-specific settings
-#   service_accounts  = var.service_accounts  # Map of service accounts and roles
-# }
-# Splunk Server module to deploy and configure Splunk server on GCP.
-module "splunk_server" {
-  source            = "./modules/splunk-server"
-  vpc_network       = module.networkModule.vpc_network_id
-  subnetwork        = module.networkModule.vpc_public_subnet_id
-
-  # General configuration
-  gcp               = var.gcp               # GCP-specific settings
-  general           = var.general           # General project variables
-
-  # Server instances and dependencies
-  splunk_server     = var.splunk_server   # Splunk server configuration
-  phantom_server    = var.phantom_server  # Phantom server configuration
-  kali_server       = var.kali_server     # Kali server configuration
-  snort_server      = var.snort_server    # Snort server configuration
-  zeek_server       = var.zeek_server     # Zeek server configuration
-  windows_servers   = var.windows_servers # Windows server configuration
-  linux_servers     = var.linux_servers   # Linux server configuration
-  simulation        = var.simulation      # Simulation configuration
+module "router" {
+  source = "./modules/router"
+  subnet_id = module.networkModule.public_subnet_id
+  image_self_link = data.google_compute_image.router_ubuntu.self_link
+  attack_range_id = var.general.attack_range_id
+  project_id = var.gcp.project_id
+  region = var.gcp.region
+  zone = var.gcp.zone
+  network_name = module.networkModule.network_name
+  key_name = var.general.key_name
+  private_ip = "10.0.1.10"
+  public_key_path = var.gcp.public_key_path
+  private_key_path = var.gcp.private_key_path
+  ip_whitelist = var.general.ip_whitelist
 }
 
-# Phantom Server module to deploy Phantom server and configure network/security settings.
-# module "phantom_server" {
-#   source               = "./modules/phantom-server"
-
-#   # Network configuration (GCP equivalent of VPC and subnet IDs)
-#   vpc_network          = module.networkModule.vpc_network_id
-#   subnetwork           = module.networkModule.vpc_public_subnet_id
-
-#   # General configuration
-#   general              = var.general
-#   gcp                  = var.gcp
-#   # service_accounts     = var.service_accounts
-#   # phantom_sa_email     = module.iam.service_account_emails["phantom"]
-#   # phantom_sa_roles     = module.iam.assigned_roles["phantom"]
-
-#   # Server instances and dependencies
-#   splunk_server        = var.splunk_server  # Splunk server configuration
-#   phantom_server       = var.phantom_server # Phantom server configuration
-# }
-
-# NGINX Server module to deploy and manage an NGINX server.
-module "nginx_server" {
-  source               = "./modules/nginx-server"
-
-  # Network configuration (GCP equivalent of VPC and subnet IDs)
-  vpc_network          = module.networkModule.vpc_network_id
-  subnetwork           = module.networkModule.vpc_public_subnet_id
-
-  # General configuration
-  general              = var.general
-  gcp                  = var.gcp
-  # service_accounts     = var.service_accounts
-  # nginx_sa_email       = module.iam.service_account_emails["nginx"]
-  # nginx_sa_roles       = module.iam.assigned_roles["nginx"]
-
-  # Server instances and dependencies
-  splunk_server        = var.splunk_server  # Splunk server configuration
-  nginx_server         = var.nginx_server   # NGINX server configuration
-}
-
-# Kali Server module to deploy Kali Linux for security assessments and network tests.
-# module "kali_server" {
-#   source              = "./modules/kali-server"                   # Module source path
-
-#   # Network configuration (GCP equivalent of VPC and subnet IDs)
-#   vpc_network         = module.networkModule.vpc_network_id       # VPC network ID
-#   subnetwork          = module.networkModule.vpc_public_subnet_id # Subnetwork ID                               # CIDR blocks for network subnets
-
-#   # General configuration
-#   general             = var.general                               # General project variables
-#   gcp                 = var.gcp                                   # GCP-specific project settings
-#   # service_accounts    = var.service_accounts                      # Map of service accounts and roles
-#   # kali_sa_email       = module.iam.service_account_emails["kali"] # Kali service account email
-#   # kali_sa_roles       = module.iam.assigned_roles["kali"]         # Kali service account roles
-
-#   # Server instances and dependencies
-#   kali_server         = var.kali_server                           # Kali server configuration
-# }
-
-# # Linux Server module to deploy and configure Linux servers.
-module "linux_server" {
-  source                = "./modules/linux-server"
-
-  # Network configuration (GCP equivalent of VPC and subnet IDs)
-  vpc_network           = module.networkModule.vpc_network_id
-  subnetwork            = module.networkModule.vpc_public_subnet_id
-
-  # General configuration
-  general               = var.general
-  gcp                   = var.gcp
-  # service_accounts      = var.service_accounts
-  # linux_sa_email        = module.iam.service_account_emails["linux"]
-  # linux_sa_roles        = module.iam.assigned_roles["linux"]
-
-  # Server instances and dependencies
-  splunk_server         = var.splunk_server
-  snort_server          = var.snort_server
-  zeek_server           = var.zeek_server
-  linux_servers         = var.linux_servers
-
-  simulation            = var.simulation
-  caldera_server        = var.caldera_server
-}
-
-# Windows Server module to deploy and configure Windows servers.
-module "windows_server" {
-  source                  = "./modules/windows-server"
-
-  # Network configuration (GCP equivalent of VPC and subnet IDs)
-  vpc_network             = module.networkModule.vpc_network_id
-  subnetwork              = module.networkModule.vpc_public_subnet_id
-
-  # General configuration
-  general                 = var.general
-  gcp                     = var.gcp
-
-  # Server instances and dependencies
-  splunk_server           = var.splunk_server
-  snort_server            = var.snort_server
-  zeek_server             = var.zeek_server
-  windows_servers         = var.windows_servers
-
-  simulation              = var.simulation
-  caldera_server          = var.caldera_server
-}
-
-# Snort Server module to deploy a Snort instance for network intrusion detection.
-module "snort_server" {
-  source = "./modules/snort-server"
-
-  # Network configuration (GCP equivalent of VPC and subnet IDs)
-  vpc_network          = module.networkModule.vpc_network_id
-  subnetwork           = module.networkModule.vpc_public_subnet_id
-
-  # General configuration
-  general              = var.general
-  gcp                  = var.gcp
-  # service_accounts     = var.service_accounts
-  # snort_sa_email       = module.iam.service_account_emails["snort"]
-  # snort_sa_roles       = module.iam.assigned_roles["snort"]
-
-  # Server instances and dependencies
-  splunk_server            = var.splunk_server
-  snort_server             = var.snort_server
-  windows_servers          = var.windows_servers
-  windows_server_instances = module.windows_server.windows_servers
-  linux_servers            = var.linux_servers
-  linux_server_instances   = module.linux_server.linux_servers
-}
-
-# Zeek Server module to deploy and configure Zeek for network monitoring.
+# Zeek server module (created before attack_range_servers to provide packet mirror policy)
+# Uses the zeek server configuration from attack_range when zeek: true is set
 module "zeek_server" {
-  source                          = "./modules/zeek-server"
+  source = "./modules/zeek-server"
 
-  # Network configuration (GCP equivalent of VPC and subnet IDs)
-  vpc_network                     = module.networkModule.vpc_network_id
-  subnetwork                      = module.networkModule.vpc_public_subnet_id
-
-  # General configuration
-  general                         = var.general
-  gcp                             = var.gcp
-  # service_accounts                = var.service_accounts
-  # zeek_sa_email                   = module.iam.service_account_emails["zeek"]
-  # zeek_sa_roles                   = module.iam.assigned_roles["zeek"]
-
-  # Server instances and dependencies
-  splunk_server                   = var.splunk_server
-  snort_server                    = var.snort_server
-  zeek_server                     = var.zeek_server
-  windows_servers                 = var.windows_servers
-  windows_server_instances        = module.windows_server.windows_servers
-  linux_servers                   = var.linux_servers
-  linux_server_instances          = module.linux_server.linux_servers
-
-  # snort_sensor_self_links         = module.snort_server.snort_server_self_links         # Snort sensor self-links
-  # snort_forwarding_rule_self_link = module.snort_server.snort_forwarding_rule_self_link # Snort forwarding rule self-link
-  # snort_backend_service_self_link = module.snort_server.snort_backend_service_self_link # Snort backend service self-link
-
+  zeek_server           = local.zeek_server_enabled
+  image_self_link       = local.zeek_server_config != null ? local.image_map[local.zeek_server_config.name] : ""
+  machine_type          = local.zeek_server_config != null ? local.zeek_server_config.instance_type : "n1-standard-8"
+  key_name              = local.zeek_server_config != null && !try(local.zeek_server_config.windows, false) ? var.general.key_name : null
+  subnet_id             = module.networkModule.private_subnet_id
+  private_ip            = local.zeek_server_config != null ? "10.0.2.${local.zeek_server_config.ip_last_octet}" : "10.0.2.50"
+  attack_range_id       = var.general.attack_range_id
+  attack_range_password = var.general.attack_range_password
+  server_name           = local.zeek_server_config != null ? local.zeek_server_config.name : "zeek"
+  project_id            = var.gcp.project_id
+  region                = var.gcp.region
+  zone                  = var.gcp.zone
+  network_name          = module.networkModule.network_name
+  public_key_path       = var.gcp.public_key_path
+  private_key_path      = var.gcp.private_key_path
 }
 
-# # Logging module for Splunk with configurations for alerts and monitoring.
-# module "logging_splunk" {
-#   source                  = "./modules/logging"
-#   count                   = var.splunk_server.splunk_server == 1 ? 1 : 0
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "splunk"
-#   log_topic               = var.log_sink_config.topics["splunk"]
-#   metric                  = var.log_sink_config.filters["splunk"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["splunk"]
+# Dynamic module creation based on attack_range configuration
+# Exclude zeek servers (they are handled by the zeek_server module)
+module "attack_range_servers" {
+  source   = "./modules/generic-server"
+  for_each = {
+    for server in var.attack_range : server.name => server
+    if !try(server.zeek, false) && server.name != "zeek"
+  }
 
-#   destination_sink                = var.splunk_server.splunk_server == 1 ? replace(var.log_sink_config.destinations["splunk"], "GOOGLE_PROJECT_ID", var.gcp.project_id) : null
-#   filter_sink                     = var.splunk_server.splunk_server == 1 ? replace(var.log_sink_config.filters["splunk"], "SPLUNK_INSTANCE_ID", module.splunk_server.splunk_instance_id[0]) : null
-#   cpu_utilization_filter          = var.splunk_server.splunk_server == 1 ? replace(var.monitor_alert.telemetry.splunk.cpu_utilization, "SPLUNK_INSTANCE_ID", module.splunk_server.splunk_instance_id[0]) : null
-#   disk_average_io_latency_filter  = var.splunk_server.splunk_server == 1 ? replace(var.monitor_alert.telemetry.splunk.disk_average_io_latency, "SPLUNK_INSTANCE_ID", module.splunk_server.splunk_instance_id[0]) : null
-#   memory_balloon_ram_used_filter  = var.splunk_server.splunk_server == 1 ? replace(var.monitor_alert.telemetry.splunk.memory_balloon_ram_used, "SPLUNK_INSTANCE_ID", module.splunk_server.splunk_instance_id[0]) : null
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for Phantom with configurations for alerts and monitoring
-# module "logging_phantom" {
-#   source                  = "./modules/logging"
-#   count                   = var.phantom_server.phantom_server == 1 ? 1 : 0
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "phantom"
-#   log_topic               = var.log_sink_config.topics["phantom"]
-#   metric                  = var.log_sink_config.filters["phantom"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["phantom"]
-
-#   destination_sink                = var.phantom_server.phantom_server == 1 ? replace(var.log_sink_config.destinations["phantom"], "GOOGLE_PROJECT_ID", var.gcp.project_id) : null
-#   filter_sink                     = var.phantom_server.phantom_server == 1 ? replace(var.log_sink_config.filters["phantom"], "PHANTOM_INSTANCE_ID", module.phantom_server.phantom_instance_id[0]) : null
-#   cpu_utilization_filter          = var.phantom_server.phantom_server == 1 ? replace(var.monitor_alert.telemetry.phantom.cpu_utilization, "PHANTOM_INSTANCE_ID", module.phantom_server.phantom_instance_id[0]) : null
-#   disk_average_io_latency_filter  = var.phantom_server.phantom_server == 1 ? replace(var.monitor_alert.telemetry.phantom.disk_average_io_latency, "PHANTOM_INSTANCE_ID", module.phantom_server.phantom_instance_id[0]) : null
-#   memory_balloon_ram_used_filter  = var.phantom_server.phantom_server == 1 ? replace(var.monitor_alert.telemetry.phantom.memory_balloon_ram_used, "PHANTOM_INSTANCE_ID", module.phantom_server.phantom_instance_id[0]) : null
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for NGINX with configurations for alerts and monitoring.
-# module "logging_nginx" {
-#   source                  = "./modules/logging"
-#   count                   = var.nginx_server.nginx_server == 1 ? 1 : 0
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "nginx"
-#   log_topic               = var.log_sink_config.topics["nginx"]
-#   metric                  = var.log_sink_config.filters["nginx"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["nginx"]
-
-#   destination_sink                = var.nginx_server.nginx_server == 1 ? replace(var.log_sink_config.destinations["nginx"], "GOOGLE_PROJECT_ID", var.gcp.project_id) : null
-#   filter_sink                     = var.nginx_server.nginx_server == 1 ? replace(var.log_sink_config.filters["nginx"], "NGINX_INSTANCE_ID", module.nginx_server.nginx_instance_id[0]) : null
-#   cpu_utilization_filter          = var.nginx_server.nginx_server == 1 ? replace(var.monitor_alert.telemetry.nginx.cpu_utilization, "NGINX_INSTANCE_ID", module.nginx_server.nginx_instance_id[0]) : null
-#   disk_average_io_latency_filter  = var.nginx_server.nginx_server == 1 ? replace(var.monitor_alert.telemetry.nginx.disk_average_io_latency, "NGINX_INSTANCE_ID", module.nginx_server.nginx_instance_id[0]) : null
-#   memory_balloon_ram_used_filter  = var.nginx_server.nginx_server == 1 ? replace(var.monitor_alert.telemetry.nginx.memory_balloon_ram_used, "NGINX_INSTANCE_ID", module.nginx_server.nginx_instance_id[0]) : null
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for Kali with configurations for alerts and monitoring.
-# module "logging_kali" {
-#   source                  = "./modules/logging"
-#   count                   = var.kali_server.kali_server == 1 ? 1 : 0
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "kali"
-#   log_topic               = var.log_sink_config.topics["kali"]
-#   metric                  = var.log_sink_config.filters["kali"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["kali"]
-
-#   destination_sink                = var.kali_server.kali_server == 1 ? replace(var.log_sink_config.destinations["kali"], "GOOGLE_PROJECT_ID", var.gcp.project_id) : null
-#   filter_sink                     = var.kali_server.kali_server == 1 ? replace(var.log_sink_config.filters["kali"], "KALI_INSTANCE_ID", module.kali_server.kali_instance_id[0]) : null
-#   cpu_utilization_filter          = var.kali_server.kali_server == 1 ? replace(var.monitor_alert.telemetry.kali.cpu_utilization, "KALI_INSTANCE_ID", module.kali_server.kali_instance_id[0]) : null
-#   disk_average_io_latency_filter  = var.kali_server.kali_server == 1 ? replace(var.monitor_alert.telemetry.kali.disk_average_io_latency, "KALI_INSTANCE_ID", module.kali_server.kali_instance_id[0]) : null
-#   memory_balloon_ram_used_filter  = var.kali_server.kali_server == 1 ? replace(var.monitor_alert.telemetry.kali.memory_balloon_ram_used, "KALI_INSTANCE_ID", module.kali_server.kali_instance_id[0]) : null
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for Linux with configurations for alerts and monitoring.
-# module "logging_linux" {
-#   source                  = "./modules/logging"
-
-#   for_each = {
-#     for idx, id in module.linux_server.linux_server_instance_ids :
-#     format("instance_id_%d", idx) => id
-#   }
-
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = format("linux-%d", local.linux_instance_id_to_index[each.value])
-#   log_topic               = format(
-#                               "%s-%d",
-#                               var.log_sink_config.topics["linux"],                    # Static topic prefix
-#                               lookup(local.linux_instance_id_to_index, each.value, 0) # Default to 0 if key not found
-#                             )
-#   metric                  = var.log_sink_config.filters["linux"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["linux"]
-
-#   destination_sink                = replace(var.log_sink_config.destinations["linux"], "GOOGLE_PROJECT_ID", var.gcp.project_id)
-#   filter_sink                     = replace(var.log_sink_config.filters["linux"], "LINUX_INSTANCE_ID", each.value)
-#   cpu_utilization_filter          = replace(var.monitor_alert.telemetry.linux.cpu_utilization, "LINUX_INSTANCE_ID", each.value)
-#   disk_average_io_latency_filter  = replace(var.monitor_alert.telemetry.linux.disk_average_io_latency, "LINUX_INSTANCE_ID", each.value)
-#   memory_balloon_ram_used_filter  = replace(var.monitor_alert.telemetry.linux.memory_balloon_ram_used, "LINUX_INSTANCE_ID", each.value)
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for Windows with configurations for alerts and monitoring.
-# module "logging_windows" {
-#   source                  = "./modules/logging"
-
-#   for_each = {
-#     for idx, id in module.windows_server.windows_server_instance_ids :
-#     format("instance_id_%d", idx) => id
-#   }
-
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = format("windows-%d", local.windows_instance_id_to_index[each.value])
-#   log_topic               = format(
-#                               "%s-%d",
-#                               var.log_sink_config.topics["windows"],                    # Static topic prefix
-#                               lookup(local.windows_instance_id_to_index, each.value, 0) # Default to 0 if key not found
-#                             )
-#   metric                  = var.log_sink_config.filters["windows"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["windows"]
-
-#   destination_sink                = replace(var.log_sink_config.destinations["windows"], "GOOGLE_PROJECT_ID", var.gcp.project_id)
-#   filter_sink                     = replace(var.log_sink_config.filters["windows"], "WINDOWS_INSTANCE_ID", each.value)
-#   cpu_utilization_filter          = replace(var.monitor_alert.telemetry.windows.cpu_utilization, "WINDOWS_INSTANCE_ID", each.value)
-#   disk_average_io_latency_filter  = replace(var.monitor_alert.telemetry.windows.disk_average_io_latency, "WINDOWS_INSTANCE_ID", each.value)
-#   memory_balloon_ram_used_filter  = replace(var.monitor_alert.telemetry.windows.memory_balloon_ram_used, "WINDOWS_INSTANCE_ID", each.value)
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for Snort with configurations for alerts and monitoring.
-# module "logging_snort" {
-#   source                  = "./modules/logging"
-#   count                   = var.snort_server.snort_server == 1 ? 1 : 0
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "snort"
-#   log_topic               = var.log_sink_config.topics["snort"]
-#   metric                  = var.log_sink_config.filters["snort"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["snort"]
-
-#   destination_sink                = var.snort_server.snort_server == 1 ? replace(var.log_sink_config.destinations["snort"], "GOOGLE_PROJECT_ID", var.gcp.project_id) : null
-#   filter_sink                     = var.snort_server.snort_server == 1 ? replace(var.log_sink_config.filters["snort"], "SNORT_INSTANCE_ID", module.snort_server.snort_instance_id[0]) : null
-#   cpu_utilization_filter          = var.snort_server.snort_server == 1 ? replace(var.monitor_alert.telemetry.snort.cpu_utilization, "SNORT_INSTANCE_ID", module.snort_server.snort_instance_id[0]) : null
-#   disk_average_io_latency_filter  = var.snort_server.snort_server == 1 ? replace(var.monitor_alert.telemetry.snort.disk_average_io_latency, "SNORT_INSTANCE_ID", module.snort_server.snort_instance_id[0]) : null
-#   memory_balloon_ram_used_filter  = var.snort_server.snort_server == 1 ? replace(var.monitor_alert.telemetry.snort.memory_balloon_ram_used, "SNORT_INSTANCE_ID", module.snort_server.snort_instance_id[0]) : null
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for Zeek with configurations for alerts and monitoring.
-# module "logging_zeek" {
-#   source                  = "./modules/logging"
-#   count                   = var.zeek_server.zeek_server == 1 ? 1 : 0
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "zeek"
-#   log_topic               = var.log_sink_config.topics["zeek"]
-#   metric                  = var.log_sink_config.filters["zeek"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["zeek"]
-
-#   destination_sink                = var.zeek_server.zeek_server == 1 ? replace(var.log_sink_config.destinations["zeek"], "GOOGLE_PROJECT_ID", var.gcp.project_id) : null
-#   filter_sink                     = var.zeek_server.zeek_server == 1 ? replace(var.log_sink_config.filters["zeek"], "ZEEK_INSTANCE_ID", module.zeek_server.zeek_instance_id[0]) : null
-#   cpu_utilization_filter          = var.zeek_server.zeek_server == 1 ? replace(var.monitor_alert.telemetry.zeek.cpu_utilization, "ZEEK_INSTANCE_ID", module.zeek_server.zeek_instance_id[0]) : null
-#   disk_average_io_latency_filter  = var.zeek_server.zeek_server == 1 ? replace(var.monitor_alert.telemetry.zeek.disk_average_io_latency, "ZEEK_INSTANCE_ID", module.zeek_server.zeek_instance_id[0]) : null
-#   memory_balloon_ram_used_filter  = var.zeek_server.zeek_server == 1 ? replace(var.monitor_alert.telemetry.zeek.memory_balloon_ram_used, "ZEEK_INSTANCE_ID", module.zeek_server.zeek_instance_id[0]) : null
-
-#   writer_identity           = var.log_sink_config.writer_identity
-#   notification_email        = var.monitor_alert.email_address
-# }
-
-# # Logging module for IAM with configurations for alerts and monitoring.
-# module "logging_iam" {
-#   source                  = "./modules/logging"
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "iam"
-#   log_topic               = var.log_sink_config.topics["iam"]
-#   metric                  = var.log_sink_config.filters["iam"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["iam"]
-
-#   destination_sink        = replace(var.log_sink_config.destinations["iam"], "GOOGLE_PROJECT_ID", var.gcp.project_id)
-#   filter_sink             = var.log_sink_config.filters["iam"]
-
-#   writer_identity         = var.log_sink_config.writer_identity
-#   notification_email      = var.monitor_alert.email_address
-# }
-
-# # Logging module for Network with configurations for alerts and monitoring
-# module "logging_network" {
-#   source                  = "./modules/logging"
-#   general                 = var.general
-#   gcp                     = var.gcp
-#   log_sink_name           = "network"
-#   log_topic               = var.log_sink_config.topics["network"]
-#   metric                  = var.log_sink_config.filters["network"]
-#   monitor_alert           = var.monitor_alert
-#   service_account_email   = module.iam.service_account_emails["network"]
-
-#   destination_sink        = replace(var.log_sink_config.destinations["network"], "GOOGLE_PROJECT_ID", var.gcp.project_id)
-#   filter_sink             = var.log_sink_config.filters["network"]
-
-#   writer_identity         = var.log_sink_config.writer_identity
-#   notification_email      = var.monitor_alert.email_address
-# }
+  server_name                    = each.value.name
+  attack_range_id                = var.general.attack_range_id
+  attack_range_password          = var.general.attack_range_password
+  image_self_link                = local.image_map[each.value.name]
+  machine_type                   = each.value.instance_type
+  key_name                       = try(each.value.windows, false) ? null : var.general.key_name
+  subnet_id                      = module.networkModule.private_subnet_id
+  private_ip                     = "10.0.2.${each.value.ip_last_octet}"
+  project_id                     = var.gcp.project_id
+  zone                           = var.gcp.zone
+  network_name                   = module.networkModule.network_name
+  user_data                      = try(each.value.windows, false) == true ? replace(local.windows_user_data_template, "%USERNAME%", try(each.value.user_name, "Administrator")) : replace(replace(local.linux_user_data_template, "%USERNAME%", try(each.value.user_name, "ubuntu")), "%PASSWORD%", var.general.attack_range_password)
+  public_key_path                = var.gcp.public_key_path
+  private_key_path               = var.gcp.private_key_path
+  zeek_monitor                   = try(each.value.zeek_monitor, false)
+  zeek_packet_mirror_policy_id   = local.zeek_server_enabled ? module.zeek_server.packet_mirror_policy_id : null
+  zeek_priority                  = try(local.packet_mirror_priorities[each.value.name], null)
+  user_name                      = try(each.value.user_name, null)
+}

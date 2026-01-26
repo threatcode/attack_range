@@ -281,6 +281,36 @@ class AwsController(AttackRangeController):
             verbosity=0,
         )
 
+    def _get_user_name_from_config(self, instance_name: str, is_windows: bool = False) -> str:
+        """Get user_name from config based on instance name.
+        
+        Args:
+            instance_name: Instance name (e.g., "ar-splunk", "ar-win")
+            is_windows: Whether this is a Windows instance
+            
+        Returns:
+            Username from config or default based on OS and cloud provider
+        """
+        # Extract server name from instance name (remove "ar-" prefix)
+        if instance_name.startswith("ar-"):
+            server_name = instance_name[3:]  # Remove "ar-" prefix
+            # Look up server in attack_range config
+            attack_range_config = self.config.get("attack_range", [])
+            for server in attack_range_config:
+                if server.get("name") == server_name:
+                    user_name = server.get("user_name")
+                    if user_name:
+                        return user_name
+        
+        # Default values if not found in config
+        if is_windows:
+            return "Administrator"
+        else:
+            # Try to infer from instance name
+            if "kali" in instance_name.lower():
+                return "kali"
+            return "ubuntu"
+    
     def show(self) -> None:
         self.logger.info("[action] > show\n")
         instances = aws_service.get_all_instances(
@@ -317,6 +347,7 @@ class AwsController(AttackRangeController):
                     splunk_ip = instance["NetworkInterfaces"][0]["Association"][
                         "PublicIp"
                     ]
+                    username = self._get_user_name_from_config(instance_name, is_windows=False)
                     messages.append(
                         "\nAccess Guacamole via:\n\tWeb > http://"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
@@ -330,9 +361,9 @@ class AwsController(AttackRangeController):
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
-                            + ":8000\n\tSSH > ssh -i"
+                            + f":8000\n\tSSH > ssh -i"
                             + self.config["aws"]["private_key_path"]
-                            + " ubuntu@"
+                            + f" {username}@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
@@ -345,9 +376,9 @@ class AwsController(AttackRangeController):
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
-                            + ":8000\n\tSSH > ssh -i"
+                            + f":8000\n\tSSH > ssh -i"
                             + self.config["aws"]["private_key_path"]
-                            + " ubuntu@"
+                            + f" {username}@"
                             + instance["NetworkInterfaces"][0]["Association"][
                                 "PublicIp"
                             ]
@@ -391,53 +422,59 @@ class AwsController(AttackRangeController):
                             + self.config["general"]["attack_range_password"]
                         )
                 elif instance_name.startswith("ar-win"):
+                    username = self._get_user_name_from_config(instance_name, is_windows=True)
                     messages.append(
                         "\nAccess Windows via:\n\tRDP > rdp://"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + ":3389\n\tusername: Administrator \n\tpassword: "
+                        + f":3389\n\tusername: {username} \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-linux"):
+                    username = self._get_user_name_from_config(instance_name, is_windows=False)
                     messages.append(
                         "\nAccess Linux via:\n\tSSH > ssh -i"
                         + self.config["aws"]["private_key_path"]
-                        + " ubuntu@"
+                        + f" {username}@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + "\n\tusername: ubuntu \n\tpassword: "
+                        + f"\n\tusername: {username} \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-kali"):
+                    username = self._get_user_name_from_config(instance_name, is_windows=False)
                     messages.append(
                         "\nAccess Kali via:\n\tSSH > ssh -i"
                         + self.config["aws"]["private_key_path"]
-                        + " kali@"
+                        + f" {username}@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + "\n\tusername: kali \n\tpassword: "
+                        + f"\n\tusername: {username} \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-nginx"):
+                    username = self._get_user_name_from_config(instance_name, is_windows=False)
                     messages.append(
                         "\nAccess Nginx Web Proxy via:\n\tSSH > ssh -i"
                         + self.config["aws"]["private_key_path"]
-                        + " ubuntu@"
+                        + f" {username}@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
                     )
                 elif instance_name.startswith("ar-zeek"):
+                    username = self._get_user_name_from_config(instance_name, is_windows=False)
                     messages.append(
                         "\nAccess Zeek via:\n\tSSH > ssh -i"
                         + self.config["aws"]["private_key_path"]
-                        + " ubuntu@"
+                        + f" {username}@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + "\n\tusername: ubuntu \n\tpassword: "
+                        + f"\n\tusername: {username} \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-snort"):
+                    username = self._get_user_name_from_config(instance_name, is_windows=False)
                     messages.append(
                         "\nAccess Snort via:\n\tSSH > ssh -i"
                         + self.config["aws"]["private_key_path"]
-                        + " ubuntu@"
+                        + f" {username}@"
                         + instance["NetworkInterfaces"][0]["Association"]["PublicIp"]
-                        + "\n\tusername: ubuntu \n\tpassword: "
+                        + f"\n\tusername: {username} \n\tpassword: "
                         + self.config["general"]["attack_range_password"]
                     )
                 elif instance_name.startswith("ar-caldera"):

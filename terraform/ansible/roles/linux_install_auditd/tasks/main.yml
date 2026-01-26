@@ -1,4 +1,0 @@
----
-
-- include_tasks: install_auditd.yml
-- include_tasks: configure_inputs_splunk.yml

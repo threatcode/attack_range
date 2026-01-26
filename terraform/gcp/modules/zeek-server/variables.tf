@@ -1,34 +1,82 @@
+variable "zeek_server" {
+  type        = bool
+  default     = false
+}
 
-variable "general" { }
+variable "image_self_link" {
+  description = "Image self link to use for the instance."
+  type        = string
+}
 
-variable "gcp" { }
+variable "machine_type" {
+  description = "GCE machine type."
+  type        = string
+}
 
-variable "vpc_network" { }
+variable "key_name" {
+  description = "SSH key name."
+  type        = string
+  default     = null
+}
 
-variable "subnetwork" { }
+variable "subnet_id" {
+  description = "Subnet ID for the instances."
+  type        = string
+}
 
-# variable "service_accounts" { }
+variable "private_ip" {
+  description = "Private IP for the instance."
+  type        = string
+}
 
-# variable "zeek_sa_email" { }
+variable "root_volume_size" {
+  description = "Root volume size in GB."
+  type        = number
+  default     = 60
+}
 
-# variable "zeek_sa_roles" { }
+variable "server_name" {
+  description = "Server Name"
+  type        = string
+}
 
-variable "snort_server" { }
+variable "attack_range_id" {
+  description = "Attack Range ID (UUID)"
+  type        = string
+}
 
-variable "zeek_server" { }
+variable "attack_range_password" {
+  description = "Attack Range Password"
+  type        = string
+}
 
-variable "linux_servers" { }
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
 
-variable "linux_server_instances" { }
+variable "region" {
+  description = "GCP Region"
+  type        = string
+  default     = null
+}
 
-variable "windows_servers" { }
+variable "zone" {
+  description = "GCP Zone"
+  type        = string
+}
 
-variable "windows_server_instances" { }
+variable "network_name" {
+  description = "Network name"
+  type        = string
+}
 
-variable "splunk_server" { }
+variable "public_key_path" {
+  description = "Path to SSH public key"
+  type        = string
+}
 
-# variable "snort_sensor_self_links" { }
-
-# variable "snort_forwarding_rule_self_link" { }
-
-# variable "snort_backend_service_self_link" { }
+variable "private_key_path" {
+  description = "Path to SSH private key"
+  type        = string
+}

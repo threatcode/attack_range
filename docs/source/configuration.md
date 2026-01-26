@@ -94,12 +94,12 @@ Additional provider-specific fields (e.g. `ami_name_filter`, `image_offer`) are 
 
 The API and app always work with the config directory; the CLI uses `config/` and resolves `-c` to a path or to `config/<id>.yml`.
 
+**Do not modify files in the `config/` folder manually.** The app and API create and update these files during build, destroy, share, and status changes. Editing them by hand can cause unintended side effects (e.g. out-of-sync state, failed operations, or duplicate or orphaned resources). Use the app, API, or CLI for all operations.
+
 ## Creating a config from a template
 
 - **API:** `POST /attack-range/build` with `{"template": "aws/splunk_minimal_aws"}` (or `provider/name` / `name`). The server creates `config/<new_uuid>.yml` and starts the build.
 - **CLI:** `python attack_range.py build -t aws/splunk_minimal_aws`. The CLI creates the config and runs the two-phase build.
-
-You can also copy a template from `templates/<provider>/` to `config/`, set `general.attack_range_id` to a unique ID, and then run destroy/simulate/share against it; building from the app or API is the usual path for new ranges.
 
 ## Environment and credentials
 

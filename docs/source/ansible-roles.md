@@ -1,62 +1,39 @@
 # Ansible Roles
 
-Attack Range uses Ansible to configure the VPN router and all lab servers. Roles are applied per host via the **roles** list in each server entry in the config (or template). Many roles come from **Ansible Galaxy** (e.g. `P4T12ICK.*`); a few are shipped in the repo under `modules/ansible/roles/`.
+Attack Range uses **Ansible** to configure every server in your range: the VPN router and all lab hosts (Splunk, Windows, Linux, Kali, etc.). Which software and behavior each host gets is defined by **roles**. You choose those roles in a **template** (and thus in the generated config). Crucially, **you can use any Ansible Galaxy role** in a template to define a new configuration—not only the ones shipped with Attack Range.
 
-## Where roles are defined
+## Using any Ansible Galaxy role in a template
 
-- **Galaxy roles** — Declared in the config (or in playbooks) and installed by the controller (e.g. `ansible-galaxy install -r requirements.yml`). Role names in configs often look like `P4T12ICK.ludus_ar_splunk`, `P4T12ICK.ar_guacamole`.
-- **Bundled roles** — Live under `modules/ansible/roles/` in the project:
-  - **atomic_red_team** — Install and run Atomic Red Team tests (Linux and Windows).
-  - **cap_attack** — CAP Attack integration (threat capture around tests).
-  - **data_replay** — Replay log files into Splunk (oneshot input).
-  - **purplesharp** — Download and run PurpleSharp simulations on Windows.
+Templates define the layout of your range. Under `attack_range`, each server has a **roles** list. Every role you list there is:
 
-Playbooks (e.g. VPN, main lab provisioning) live under `terraform/ansible/` (or the provider-specific ansible path) and reference these roles.
+1. **Installed automatically** — Before any playbook runs, Attack Range extracts all role names from the config and runs `ansible-galaxy install <role_name>` for each. So any role that exists on [Ansible Galaxy](https://galaxy.ansible.com/) can be used.
+2. **Applied at build time** — The main lab playbook is generated from your config. Each server gets a play that runs exactly the roles you attached to it, in order, with any variables you passed.
 
-## Bundled roles (summary)
+So if you want to add a custom stack (e.g. a different Splunk app, a monitoring role, or a security tool), add the Galaxy role name to the **roles** list of the right server in your template and build from that template. No need to modify Attack Range code.
 
-### atomic_red_team
+### Role name format
 
-Used by the **simulate** flow to run MITRE ATT&amp;CK techniques (Atomic Red Team).
+Use the **Galaxy role name** as it appears on Ansible Galaxy. That is usually `namespace.role_name` (e.g. `geerlingguy.nginx`, `P4T12ICK.ludus_ar_splunk`). The same format is used when you run `ansible-galaxy install namespace.role_name`.
 
-- **Install (Linux):** `install_art_linux.yml` — installs PowerShell and Atomic Red Team (Invoke-AtomicRedTeam) on Ubuntu/Debian/RedHat.
-- **Run (Linux):** `run_art_linux.yml` — for each technique, can start/stop CAP Attack (if enabled), then runs `Invoke-AtomicTest` (GetPrereqs, run, Cleanup).
-- **Run (Windows):** `run_art_test_windows.yml` — runs Atomic tests on Windows hosts.
-- **Entry:** `main.yml` includes the install/run task files based on OS (Ubuntu vs Windows).
+### Declaring roles in a template
 
-Variables (from the simulate request or playbook) include the list of **techniques** (e.g. `T1003.001`, `T1059.003`). The controller (or API/CLI) passes the target host and techniques into the playbook.
+In the template (and thus in the config), each server is a list entry under `attack_range`. The **roles** key is a list. You can use either of these forms:
 
-### cap_attack
+**Role name only (string):**
 
-Wraps attack runs with **CAP Attack** (threat capture) on Windows and Linux.
+```yaml
+attack_range:
+  - name: myserver
+    instance_type: t3.medium
+    ip_last_octet: 20
+    linux: true
+    user_name: ubuntu
+    roles:
+      - geerlingguy.docker
+      - some_namespace.some_role
+```
 
-- **Tasks:** Start/stop CAP Attack; optionally upload capture. Used from `atomic_red_team` (Linux) and from Windows playbooks.
-- **Variables:** e.g. `cap_attack`, `cap_attack_action` (start/stop), `cap_attack_upload_threat_capture`.
-
-When enabled, the role starts capture before running atoms and stops (and optionally uploads) after. Defaults live in `defaults/main.yml`.
-
-### data_replay
-
-Replays a log file into Splunk via the **oneshot** HTTP input.
-
-- **Tasks:** Copy a file to the target (e.g. `/tmp/data.log`), then POST to `https://localhost:8089/services/data/inputs/oneshot` with `source`, `sourcetype`, `index`, and auth.
-- **Variables:** `file_name`, `source`, `sourcetype`, `index`, `attack_range_password` (or Splunk auth). Used for dumping and re-ingesting attack data.
-
-### purplesharp
-
-Runs **PurpleSharp** on Windows hosts (adversary simulation).
-
-- **Tasks:** Download the latest PurpleSharp binary from GitHub into `c:\Tools\PurpleSharp\`, then either run a **simulation playbook** or a list of **techniques**.
-- **Includes:** `run_simulation_playbook.yml` when using a playbook; `run_simulation_techniques.yml` when using technique IDs.
-- **Variables:** `run_simulation_playbook`, `techniques`, and playbook-specific vars.
-
-## How roles are applied at build time
-
-1. The config (from template) lists servers and their **roles** (and optional **vars**).
-2. The controller installs Galaxy requirements (roles defined in the config or a generated `requirements.yml`).
-3. Main provisioning playbooks run against the inventory (router + lab hosts); each host gets the roles listed under its entry in `attack_range`.
-
-Example (from a template):
+**Role with variables (dictionary):**
 
 ```yaml
 attack_range:
@@ -65,32 +42,51 @@ attack_range:
     roles:
       - role: P4T12ICK.ludus_ar_splunk
         vars:
-          ludus_ar_splunk_password: "Pl3ase-k1Ll-me:p"
-      - role: P4T12ICK.ar_guacamole
+          ludus_ar_splunk_password: "MySecurePass"
+      - role: geerlingguy.nginx
         vars:
-          ar_guacamole_password: "Pl3ase-k1Ll-me:p"
-          ar_guacamole_servers: [...]
-  - name: win
-    ...
-    roles:
-      - role: P4T12ICK.ludus_ar_windows
-        vars:
-          ludus_ar_windows_splunk_ip: 10.0.2.10
+          nginx_http_port: 8080
 ```
 
-## How simulate uses roles
+- **role** — The Galaxy role name (required in the dict form).
+- **vars** — Optional variables passed to that role for this host. Follow the role’s documentation on variable names and values.
+- **inventory_name** — Optional. If set, this role is applied to the host group with that name instead of the server’s `name`. Used when one role expects a specific group name in the inventory.
 
-When you run **simulate** (API or CLI):
+You can mix string and dict entries in the same **roles** list. Multiple roles on the same server run in the order listed.
 
-1. The controller resolves the **target** host and **techniques** from the request.
-2. It runs the Atomic Red Team playbook (and, if applicable, CAP Attack or PurpleSharp) against that host, passing `techniques` (and any other vars).
-3. The **atomic_red_team** role (and optionally **cap_attack** or **purplesharp**) runs on the target; result is returned in the API response or CLI output.
+### Example: defining a new configuration with Galaxy roles
 
-So the same Ansible roles used during initial lab provisioning are reused for simulation; the simulate flow only invokes the execution parts (run atoms, run PurpleSharp, etc.) with the chosen target and techniques.
+1. Copy an existing template from `templates/<provider>/` (e.g. `splunk_minimal_aws.yml`).
+2. Add or replace roles under the server(s) you want to change. Use any Galaxy role names.
+3. For each role that needs options, use the dict form and set **vars** according to the role’s docs.
+4. Save the template (e.g. as `templates/aws/my_custom_range.yml`) and build from it via the app or API (e.g. template `aws/my_custom_range`).
 
-## Customizing and adding roles
+At build time, Attack Range will install every listed Galaxy role and run them on the matching hosts. No extra steps are required.
 
-- **Galaxy:** Add a role to the requirements used by the controller (or to a playbook’s `roles:` section). Ensure the config’s `attack_range` entries reference the role name and any `vars`.
-- **Local:** Add a new role under `modules/ansible/roles/<role_name>/` with `tasks/main.yml` and optional `defaults/`, then reference it in templates/configs as `role: <role_name>` (or by full path if your playbooks use it). The controller and playbook paths must be set so that Ansible can find these roles (usually via `roles_path` or relative to the playbook).
+## How roles are installed and run
 
-For exact task names and variables, see the task files under `modules/ansible/roles/*/tasks/`.
+- **Source of truth:** The config file (created from your template) in `config/<attack_range_id>.yml`. Its `attack_range` section lists servers and their **roles**.
+- **Installation:** Before the VPN and lab playbooks run, the controller scans `attack_range` for all role names (from both `role: name` and plain `name` in the list) and runs `ansible-galaxy install` for each. So only roles referenced in your config are installed.
+- **Execution:** The lab playbook (`lab.yaml`) is generated from the same config: one play per host (or per `inventory_name` group), with that host’s roles and vars. So the exact roles and variables you put in the template are what run on each machine.
+
+This is why **any** Galaxy role can define your configuration: if it’s in the template’s **roles** list, it gets installed and executed.
+
+## Roles shipped with Attack Range
+
+Attack Range also ships a few **local** roles under `modules/ansible/roles/`. These are used internally for simulation and special playbooks (e.g. Atomic Red Team, data replay). You do not have to use them to define your own configuration; they are just part of the built-in workflows.
+
+| Role | Purpose |
+|------|---------|
+| **atomic_red_team** | Install and run Atomic Red Team tests (Linux/Windows). Used by the **simulate** action. |
+| **cap_attack** | CAP Attack (threat capture) around tests. |
+| **data_replay** | Replay log files into Splunk via oneshot input. |
+| **purplesharp** | Run PurpleSharp adversary simulation on Windows. |
+
+The built-in templates use a mix of **Galaxy** roles (e.g. `P4T12ICK.ludus_ar_splunk`, `P4T12ICK.ar_guacamole`) and, when you run simulate, the bundled roles above. For **your** templates, you can rely entirely on Galaxy roles (and optionally local roles if you add them to the roles path and reference them by name).
+
+## Summary
+
+- **Templates** define which Ansible roles run on which servers via the **roles** list under each server in `attack_range`.
+- **Any Ansible Galaxy role** can be used: list it by name (e.g. `namespace.role_name`). Attack Range installs it and runs it at build time.
+- Use **vars** (dict form) to pass variables to a role. Use **inventory_name** when the role expects a specific host group.
+- To define a new configuration, create or edit a template, add the desired Galaxy roles (and vars), and build from that template. No code changes are required.

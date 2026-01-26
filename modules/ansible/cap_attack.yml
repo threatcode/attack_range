@@ -1,6 +1,0 @@
----
-- name: CAP Attack
-  hosts: all
-  gather_facts: True
-  roles:
-    - cap_attack

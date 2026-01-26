@@ -71,19 +71,6 @@ At build time, Attack Range will install every listed Galaxy role and run them o
 
 This is why **any** Galaxy role can define your configuration: if it’s in the template’s **roles** list, it gets installed and executed.
 
-## Roles shipped with Attack Range
-
-Attack Range also ships a few **local** roles under `modules/ansible/roles/`. These are used internally for simulation and special playbooks (e.g. Atomic Red Team, data replay). You do not have to use them to define your own configuration; they are just part of the built-in workflows.
-
-| Role | Purpose |
-|------|---------|
-| **atomic_red_team** | Install and run Atomic Red Team tests (Linux/Windows). Used by the **simulate** action. |
-| **cap_attack** | CAP Attack (threat capture) around tests. |
-| **data_replay** | Replay log files into Splunk via oneshot input. |
-| **purplesharp** | Run PurpleSharp adversary simulation on Windows. |
-
-The built-in templates use a mix of **Galaxy** roles (e.g. `P4T12ICK.ludus_ar_splunk`, `P4T12ICK.ar_guacamole`) and, when you run simulate, the bundled roles above. For **your** templates, you can rely entirely on Galaxy roles (and optionally local roles if you add them to the roles path and reference them by name).
-
 ## Summary
 
 - **Templates** define which Ansible roles run on which servers via the **roles** list under each server in `attack_range`.

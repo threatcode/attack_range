@@ -1181,37 +1181,66 @@ class AnsibleManager:
         except OSError as e:
             self.logger.debug(f"Could not patch WireGuard wg0.j2: {e}")
 
-    def install_ansible_galaxy_role(self, role_name: str, force: bool = True) -> bool:
+    def install_ansible_galaxy_role(self, role_name: str, force: bool = True, max_retries: int = 3) -> bool:
         """
-        Install a specific Ansible Galaxy role.
+        Install a specific Ansible Galaxy role with retry logic for transient SSL/network errors.
 
         :param role_name: Name of the role to install (e.g., 'p4t12ick.ar_wireguard_vpn')
         :param force: If True, pass --force to overwrite existing; if False, skip when already installed.
+        :param max_retries: Maximum number of retry attempts for transient errors (default: 3)
         :return: True if installation succeeded, False otherwise
         """
         cwd = os.getcwd()
         try:
             os.chdir(self.ansible_dir)
-            self.logger.info(f"Installing role: {role_name}")
+            
             cmd = ["ansible-galaxy", "install", role_name]
             if force:
                 cmd.append("--force")
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True
-            )
+            
+            # Retry logic for transient SSL/network errors
+            for attempt in range(max_retries):
+                if attempt > 0:
+                    # Exponential backoff: 2^attempt seconds (2, 4, 8 seconds)
+                    wait_time = 2 ** attempt
+                    self.logger.warning(f"Retrying installation of role '{role_name}' (attempt {attempt + 1}/{max_retries}) after {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    self.logger.info(f"Installing role: {role_name}")
+                
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout per attempt
+                )
 
-            if result.returncode != 0:
-                self.logger.error(f"Failed to install role '{role_name}': {result.stderr}")
-                if result.stdout:
-                    self.logger.error(f"stdout: {result.stdout}")
-                return False
-            else:
-                self.logger.info(f"Successfully installed role: {role_name}")
-                if result.stdout:
-                    self.logger.debug(result.stdout)
-                return True
+                if result.returncode == 0:
+                    self.logger.info(f"Successfully installed role: {role_name}")
+                    if result.stdout:
+                        self.logger.debug(result.stdout)
+                    return True
+                
+                # Check if this is a transient SSL/network error that might benefit from retry
+                error_output = result.stderr.lower() if result.stderr else ""
+                is_transient_error = any(keyword in error_output for keyword in [
+                    "ssl", "unexpected_eof", "eof occurred", "connection", 
+                    "timeout", "temporary failure", "network", "urlopen error"
+                ])
+                
+                if is_transient_error and attempt < max_retries - 1:
+                    # Log warning but continue to retry
+                    self.logger.warning(f"Transient error installing role '{role_name}' (attempt {attempt + 1}/{max_retries}): {result.stderr[:200]}")
+                    continue
+                else:
+                    # Final attempt failed or non-transient error
+                    self.logger.error(f"Failed to install role '{role_name}': {result.stderr}")
+                    if result.stdout:
+                        self.logger.error(f"stdout: {result.stdout}")
+                    return False
+            
+            # Should not reach here, but just in case
+            return False
         finally:
             os.chdir(cwd)
 

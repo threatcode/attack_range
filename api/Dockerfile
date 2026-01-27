@@ -56,7 +56,6 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy application files
 COPY api/ /app/api/
 COPY attack_range/ /app/attack_range/
-COPY modules/ /app/modules/
 COPY templates/ /app/templates/
 COPY terraform/ /app/terraform/
 

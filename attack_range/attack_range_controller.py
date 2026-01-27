@@ -9,7 +9,7 @@ import os
 import sys
 import time
 from typing import Callable, Optional
-from modules import logger
+from .logger import setup_logging
 
 # Import managers
 from .managers.config_manager import ConfigManager
@@ -39,7 +39,7 @@ class AttackRangeController:
         """
         self.config = config
         self.config_path = config_path
-        self.logger = logger.setup_logging(
+        self.logger = setup_logging(
             os.path.join(os.path.dirname(__file__), "../attack_range.log"), "INFO"
         )
 

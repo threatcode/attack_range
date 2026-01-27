@@ -12,8 +12,7 @@ terraform/ansible/
 vagrant/*vars.json
 scripts/apps/*.tgz
 ssh_keys/*
-config/*
-
+config/*.yml
 ansible/
 #keys
 *.key

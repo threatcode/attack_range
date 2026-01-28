@@ -19,7 +19,7 @@ Docker Compose runs the API, web app, and (optionally) the CLI without installin
 
    ```bash
    cd attack_range_2
-   docker compose -f docker/docker-compose.yml up -d
+   docker compose -f docker/docker-compose.yml up 
    ```
 
    This starts:
@@ -40,7 +40,7 @@ Docker Compose runs the API, web app, and (optionally) the CLI without installin
 4. **Optional — CLI in Docker:**
 
    ```bash
-   docker compose -f docker/docker-compose.yml run --rm --profile cli attack_range build -t aws/splunk_minimal_aws
+   docker compose --profile cli -f docker/docker-compose.yml run --rm attack_range build -t aws/splunk_minimal_aws
    ```
 
    The CLI will prompt you to connect to the VPN, then continue the lab build. Other commands: `destroy`, `simulate`, `share` (see [Configuration](configuration.md) and CLI sections below).
@@ -82,7 +82,7 @@ All build/destroy operations are asynchronous: you get an `attack_range_id` and 
 You can run the CLI:
 
 - **Inside Docker** (recommended):  
-  `docker compose -f docker/docker-compose.yml run --rm --profile cli attack_range <action> [options]`
+  `docker compose --profile cli -f docker/docker-compose.yml run --rm attack_range <action> [options]`
 - **Locally:** from the project root, `python attack_range.py <action> [options]` (requires Python, Ansible, Terraform, and cloud CLI on the host).
 
 ### CLI actions

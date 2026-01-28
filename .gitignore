@@ -8,7 +8,8 @@ terraform/ansible/lab.yaml
 terraform/ansible/vpn.yaml
 terraform/ansible/vpn_config.yaml
 terraform/ansible/client_configs/
-terraform/ansible/
+terraform/ansible/artifacts/*
+terraform/ansible/env/*
 vagrant/*vars.json
 scripts/apps/*.tgz
 ssh_keys/*

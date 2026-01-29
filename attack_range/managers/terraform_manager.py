@@ -158,9 +158,33 @@ class TerraformManager:
             raise RuntimeError(stderr or stdout or "Terraform apply failed")
         self.logger.info("Terraform apply completed successfully")
 
+    def force_unlock(self, lock_id: str) -> None:
+        """
+        Force unlock Terraform state.
+        
+        :param lock_id: Lock ID to unlock (from terraform error message)
+        """
+        self.logger.info(f"Force unlocking terraform state with lock ID: {lock_id}")
+        cwd = os.getcwd()
+        try:
+            os.chdir(self.terraform_dir)
+            unlock_result = subprocess.run(
+                ["terraform", "force-unlock", "-force", lock_id],
+                capture_output=True,
+                text=True
+            )
+            if unlock_result.returncode != 0:
+                self.logger.warning(f"Terraform force-unlock failed: {unlock_result.stderr}")
+                # Don't raise - this is best effort
+            else:
+                self.logger.info("Terraform state unlocked successfully")
+        finally:
+            os.chdir(cwd)
+
     def destroy(self) -> None:
         """
         Destroy Terraform infrastructure.
+        Attempts to unlock state if locked.
         """
         self.logger.info("Destroying terraform infrastructure...")
         return_code, stdout, stderr = self.terraform.destroy(
@@ -171,8 +195,28 @@ class TerraformManager:
         )
 
         if return_code != 0:
-            self.logger.error(f"Terraform destroy failed: {stderr}")
-            raise RuntimeError(stderr or "Terraform destroy failed")
+            # Check if error is due to locked state
+            error_output = stderr or stdout or ""
+            if "Error acquiring the state lock" in error_output or "lock is currently held" in error_output.lower():
+                # Try to extract lock ID from error message
+                import re
+                lock_id_match = re.search(r'Lock ID:\s*([a-f0-9-]+)', error_output, re.IGNORECASE)
+                if lock_id_match:
+                    lock_id = lock_id_match.group(1)
+                    self.logger.warning(f"Terraform state is locked. Attempting to unlock with ID: {lock_id}")
+                    self.force_unlock(lock_id)
+                    # Retry destroy after unlock
+                    self.logger.info("Retrying terraform destroy after unlock...")
+                    return_code, stdout, stderr = self.terraform.destroy(
+                        capture_output="yes",
+                        no_color=IsNotFlagged,
+                        force=IsNotFlagged,
+                        auto_approve=True,
+                    )
+            
+            if return_code != 0:
+                self.logger.error(f"Terraform destroy failed: {stderr}")
+                raise RuntimeError(stderr or "Terraform destroy failed")
         self.logger.info("Terraform infrastructure destroyed successfully")
 
     def get_output(self, output_name: str) -> str:

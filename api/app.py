@@ -894,6 +894,75 @@ def destroy_attack_range(body: DestroyRequest):
         ).model_dump()), 500
 
 
+@app.post(
+    "/attack-range/abort",
+    tags=[attack_range_tag],
+    responses={200: DestroyResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse},
+    summary="Abort attack range build",
+    description="Abort a build operation in progress. Sets status to 'aborted'."
+)
+def abort_attack_range(body: DestroyRequest):
+    """Abort a build operation by setting abort_requested flag and status to aborted."""
+    try:
+        attack_range_id = body.attack_range_id
+
+        config_filename = f"{attack_range_id}.yml" if not attack_range_id.endswith('.yml') else attack_range_id
+        config_path = os.path.join(CONFIG_DIR, config_filename)
+
+        if not os.path.exists(config_path):
+            return jsonify(ErrorResponse(
+                message=f"Config file not found for attack_range_id: {attack_range_id}",
+                details="Make sure the attack range exists"
+            ).model_dump()), 404
+
+        # Check if build is in progress
+        build_statuses = ("queued", "build_vpn", "build_lab")
+        with operations_lock:
+            current = running_operations.get(attack_range_id)
+            status = (current.get("status") if current else None) or ""
+        
+        if not status and os.path.exists(config_path):
+            try:
+                config_for_status = load_yaml_file(config_path)
+                status = config_for_status.get("general", {}).get("status") or ""
+            except Exception:
+                status = ""
+
+        if status not in build_statuses:
+            return jsonify(ErrorResponse(
+                message=f"Cannot abort: attack range is not in a build state. Current status: {status}",
+                details="Abort can only be called during build (queued, build_vpn, build_lab)"
+            ).model_dump()), 400
+
+        # Set abort_requested flag
+        with operations_lock:
+            op = running_operations.get(attack_range_id)
+            if op:
+                op["abort_requested"] = True
+            else:
+                # If not in running_operations, create entry
+                running_operations[attack_range_id] = {
+                    "type": "build",
+                    "status": status,
+                    "abort_requested": True,
+                    "attack_range_id": attack_range_id
+                }
+
+        # Immediately set status to aborted
+        _check_abort_and_set_aborted(attack_range_id, config_path)
+
+        return jsonify(DestroyResponse(
+            status="accepted",
+            message=f"Build abort requested. Attack Range ID: {attack_range_id}"
+        ).model_dump()), 200
+        
+    except Exception as e:
+        return jsonify(ErrorResponse(
+            message="Failed to abort build operation",
+            details=str(e)
+        ).model_dump()), 500
+
+
 @app.get(
     "/attack-range/status/<attack_range_id>",
     tags=[attack_range_tag],

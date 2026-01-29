@@ -41,7 +41,7 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
    docker compose --profile cli -f docker/docker-compose.yml run --rm attack_range build -t aws/splunk_minimal_aws
    ```
 
-   Other actions: `destroy`, `simulate`, `share`. See [Detailed documentation](https://attack-range.readthedocs.io/) for CLI usage and flags.
+   Other actions: `destroy`, `simulate`, `share`. See [Detailed documentation](https://attack-range.readthedocs.io/en/release_v5/) for CLI usage and flags.
 
 ---
 
@@ -58,7 +58,7 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
 
 ## Documentation
 
-- **Full docs (Read the Docs):** [https://attack-range.readthedocs.io/](https://attack-range.readthedocs.io/)
+- **Full docs (Read the Docs):** [https://attack-range.readthedocs.io/](https://attack-range.readthedocs.io/en/release_v5/)
 - Chapters: **Getting Started**, **Configuration**, **Networking**, **Sharing**, **Templates**, **Ansible Roles**
 
 ---

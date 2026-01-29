@@ -44,13 +44,22 @@ if (id) {
 			<div class="detail-section basic-info-section">
 				<div class="basic-info-header">
 					<h3>Basic Information</h3>
-					<button
-						class="destroy-button"
-						data-id={attackRange.attack_range_id}
-						disabled={attackRange.status === 'destroying'}
-					>
-						{attackRange.status === 'destroying' ? 'Destroying...' : 'Destroy'}
-					</button>
+					{['queued', 'build_vpn', 'build_lab'].includes(attackRange.status) ? (
+						<button
+							class="abort-button"
+							data-id={attackRange.attack_range_id}
+						>
+							Abort
+						</button>
+					) : (
+						<button
+							class="destroy-button"
+							data-id={attackRange.attack_range_id}
+							disabled={attackRange.status === 'destroying'}
+						>
+							{attackRange.status === 'destroying' ? 'Destroying...' : 'Destroy'}
+						</button>
+					)}
 				</div>
 				<div class="detail-grid">
 					<div class="detail-item">
@@ -496,6 +505,47 @@ if (id) {
 			});
 		}
 
+		// Handle abort button
+		const abortButton = document.querySelector('.abort-button');
+		if (abortButton) {
+			abortButton.addEventListener('click', async () => {
+				const attackRangeId = (abortButton as HTMLElement).dataset.id;
+				if (!attackRangeId) return;
+				
+				if (!confirm(`Are you sure you want to abort the build for attack range ${attackRangeId}?`)) {
+					return;
+				}
+
+				const btn = abortButton as HTMLButtonElement;
+				btn.disabled = true;
+				btn.textContent = 'Aborting...';
+
+				try {
+					const response = await fetch(`${API_BASE_URL}/attack-range/abort`, {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({ attack_range_id: attackRangeId }),
+					});
+
+					if (!response.ok) {
+						const error = await response.json();
+						throw new Error(error.message || 'Failed to abort build');
+					}
+
+					// Reload page to show updated status (aborted)
+					setTimeout(() => {
+						window.location.reload();
+					}, 1000);
+				} catch (error) {
+					alert(`Error: ${error instanceof Error ? error.message : 'Failed to abort build'}`);
+					btn.disabled = false;
+					btn.textContent = 'Abort';
+				}
+			});
+		}
+
 		// Handle destroy button
 		const destroyButton = document.querySelector('.destroy-button');
 		if (destroyButton) {
@@ -839,7 +889,8 @@ if (id) {
 		margin: 0;
 	}
 
-	.basic-info-section .destroy-button {
+	.basic-info-section .destroy-button,
+	.basic-info-section .abort-button {
 		margin-top: 0;
 		flex-shrink: 0;
 	}
@@ -1252,7 +1303,8 @@ if (id) {
 	}
 
 	.continue-button,
-	.destroy-button {
+	.destroy-button,
+	.abort-button {
 		margin-top: 1.25rem;
 		border: none;
 		border-radius: 10px;
@@ -1290,13 +1342,29 @@ if (id) {
 		box-shadow: 0 8px 12px rgba(239, 68, 68, 0.25);
 	}
 
+	.abort-button {
+		background: rgba(245, 158, 11, 0.15);
+		color: #fbbf24;
+		border: 1px solid rgba(245, 158, 11, 0.3);
+		box-shadow: 0 4px 6px rgba(245, 158, 11, 0.15);
+	}
+
+	.abort-button:hover:not(:disabled) {
+		background: rgba(245, 158, 11, 0.25);
+		border-color: rgba(245, 158, 11, 0.5);
+		transform: translateY(-2px);
+		box-shadow: 0 8px 12px rgba(245, 158, 11, 0.25);
+	}
+
 	.continue-button:active:not(:disabled),
-	.destroy-button:active:not(:disabled) {
+	.destroy-button:active:not(:disabled),
+	.abort-button:active:not(:disabled) {
 		transform: translateY(0);
 	}
 
 	.continue-button:disabled,
-	.destroy-button:disabled {
+	.destroy-button:disabled,
+	.abort-button:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 		transform: none;
@@ -1441,6 +1509,12 @@ if (id) {
 		background: rgba(148, 163, 184, 0.15);
 		color: #cbd5e1;
 		border-color: rgba(148, 163, 184, 0.3);
+	}
+
+	.status-aborted {
+		background: rgba(245, 158, 11, 0.15);
+		color: #fbbf24;
+		border-color: rgba(245, 158, 11, 0.3);
 	}
 
 	.guacamole-description {

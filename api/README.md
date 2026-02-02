@@ -44,7 +44,7 @@ cd api
 python app.py
 ```
 
-The API will be available at `http://localhost:5000`
+The API will be available at `http://localhost:4000`
 
 ### Production Mode
 
@@ -53,16 +53,16 @@ For production deployment, use a production WSGI server like Gunicorn:
 ```bash
 cd api
 pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 app:app
+gunicorn -w 4 -b 0.0.0.0:4000 app:app
 ```
 
 ## API Documentation
 
 Once the API is running, you can access the interactive OpenAPI documentation at:
 
-- **OpenAPI JSON**: `http://localhost:5000/openapi/openapi.json`
-- **Swagger UI**: `http://localhost:5000/openapi/swagger`
-- **Redoc**: `http://localhost:5000/openapi/redoc`
+- **OpenAPI JSON**: `http://localhost:4000/openapi/openapi.json`
+- **Swagger UI**: `http://localhost:4000/openapi/swagger`
+- **Redoc**: `http://localhost:4000/openapi/redoc`
 
 ## API Endpoints
 
@@ -270,7 +270,7 @@ Get the content of a saved configuration.
 
 ```bash
 # Phase 1: Start build with template
-RESPONSE=$(curl -X POST http://localhost:5000/attack-range/build \
+RESPONSE=$(curl -X POST http://localhost:4000/attack-range/build \
   -H "Content-Type: application/json" \
   -d '{
     "template": "aws/splunk_minimal_aws"
@@ -283,12 +283,12 @@ echo "Attack Range ID: $ATTACK_RANGE_ID"
 
 # Check status until wait_for_vpn
 while true; do
-  STATUS=$(curl -s http://localhost:5000/attack-range/status/$ATTACK_RANGE_ID | jq -r '.status')
+  STATUS=$(curl -s http://localhost:4000/attack-range/status/$ATTACK_RANGE_ID | jq -r '.status')
   echo "Status: $STATUS"
   
   if [ "$STATUS" = "wait_for_vpn" ]; then
     # Get WireGuard config (also automatically saved to wireguard_config/ folder)
-    curl -s http://localhost:5000/attack-range/status/$ATTACK_RANGE_ID | \
+    curl -s http://localhost:4000/attack-range/status/$ATTACK_RANGE_ID | \
       jq -r '.wireguard_config' > attack_range.conf
     
     echo "WireGuard config saved to attack_range.conf"
@@ -302,7 +302,7 @@ while true; do
 done
 
 # Phase 2: Continue build after VPN connection
-curl -X POST http://localhost:5000/attack-range/build \
+curl -X POST http://localhost:4000/attack-range/build \
   -H "Content-Type: application/json" \
   -d "{
     \"attack_range_id\": \"$ATTACK_RANGE_ID\"
@@ -310,7 +310,7 @@ curl -X POST http://localhost:5000/attack-range/build \
 
 # Monitor final build
 while true; do
-  STATUS=$(curl -s http://localhost:5000/attack-range/status/$ATTACK_RANGE_ID | jq -r '.status')
+  STATUS=$(curl -s http://localhost:4000/attack-range/status/$ATTACK_RANGE_ID | jq -r '.status')
   echo "Status: $STATUS"
   
   if [ "$STATUS" = "running" ] || [ "$STATUS" = "error" ]; then
@@ -325,10 +325,10 @@ done
 
 ```bash
 # List saved configs
-curl http://localhost:5000/configs
+curl http://localhost:4000/configs
 
 # Destroy by attack_range_id
-curl -X POST http://localhost:5000/attack-range/destroy \
+curl -X POST http://localhost:4000/attack-range/destroy \
   -H "Content-Type: application/json" \
   -d '{"attack_range_id": "550e8400-e29b-41d4-a716-446655440000"}'
 ```
@@ -340,7 +340,7 @@ import requests
 import time
 
 # API base URL
-BASE_URL = "http://localhost:5000"
+BASE_URL = "http://localhost:4000"
 
 # Health check
 response = requests.get(f"{BASE_URL}/health")
@@ -481,7 +481,7 @@ For production deployments, consider:
 ### API won't start
 
 - Ensure all dependencies are installed: `pip install -r requirements.txt`
-- Check that port 5000 is not already in use
+- Check that port 4000 is not already in use
 - Verify Python version is 3.8+
 
 ### Build/Destroy operations fail
@@ -493,7 +493,7 @@ For production deployments, consider:
 
 ### OpenAPI documentation not loading
 
-- Access the JSON directly: `http://localhost:5000/openapi/openapi.json`
+- Access the JSON directly: `http://localhost:4000/openapi/openapi.json`
 - Try different browsers or clear cache
 - Check browser console for JavaScript errors
 

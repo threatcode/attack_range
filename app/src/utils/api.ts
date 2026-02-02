@@ -12,10 +12,10 @@ function getApiBaseUrl(): string {
 		}
 		// Otherwise, check if we're in Docker
 		const isDocker = process.env.DOCKER === 'true';
-		return isDocker ? 'http://api:5000' : 'http://localhost:5000';
+		return isDocker ? 'http://api:4000' : 'http://localhost:4000';
 	}
 	// Client-side - use import.meta.env
-	return (import.meta.env.PUBLIC_API_URL || 'http://localhost:5000').trim();
+	return (import.meta.env.PUBLIC_API_URL || 'http://localhost:4000').trim();
 }
 
 const API_BASE_URL = getApiBaseUrl();

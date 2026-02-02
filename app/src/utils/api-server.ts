@@ -13,10 +13,10 @@ function getApiBaseUrl(): string {
 		}
 		// Otherwise, check if we're in Docker
 		const isDocker = process.env.DOCKER === 'true';
-		return isDocker ? 'http://api:5000' : 'http://localhost:5000';
+		return isDocker ? 'http://api:4000' : 'http://localhost:4000';
 	}
 	// Fallback for local dev
-	return 'http://localhost:5000';
+	return 'http://localhost:4000';
 }
 
 const API_BASE_URL = getApiBaseUrl();

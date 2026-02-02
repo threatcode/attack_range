@@ -28,7 +28,7 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
 3. **Use the app or API:**
 
    - **Web app:** open [http://localhost:4321](http://localhost:4321) — build/destroy ranges, view status, run simulations, share access.
-   - **API:** [http://localhost:5000](http://localhost:5000) — REST API; interactive docs at [http://localhost:5000/openapi/swagger](http://localhost:5000/openapi/swagger).
+   - **API:** [http://localhost:4000](http://localhost:4000) — REST API; interactive docs at [http://localhost:4000/openapi/swagger](http://localhost:4000/openapi/swagger).
 
 4. **Build a range (two steps):**
 

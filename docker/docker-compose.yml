@@ -27,7 +27,7 @@ services:
       dockerfile: api/Dockerfile
     container_name: attack-range-api
     ports:
-      - "5000:5000"
+      - "4000:4000"
     volumes:
       - ../config:/app/config
       - ../ssh_keys:/app/ssh_keys
@@ -60,9 +60,9 @@ services:
       # Mark that we're running in Docker
       - DOCKER=true
       # Use Docker service name for server-side SSR requests
-      - API_URL=http://api:5000
+      - API_URL=http://api:4000
       # Use localhost for client-side requests (browser)
-      - PUBLIC_API_URL=http://localhost:5000
+      - PUBLIC_API_URL=http://localhost:4000
     depends_on:
       - api
     restart: unless-stopped

@@ -68,7 +68,7 @@ ENV FLASK_APP=api/app.py
 ENV OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 # Expose port
-EXPOSE 5000
+EXPOSE 4000
 
 # Run the application
 CMD ["python", "api/app.py"]

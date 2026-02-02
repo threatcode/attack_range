@@ -1803,4 +1803,4 @@ if __name__ == "__main__":
     os.makedirs(WIREGUARD_CONFIG_DIR, exist_ok=True)
     
     # Run the Flask app
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=4000, debug=False)

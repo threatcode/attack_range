@@ -45,29 +45,29 @@ docker-compose up --build
 
 Once running, access:
 
-- **API**: http://localhost:5000
-- **Swagger UI**: http://localhost:5000/openapi/swagger
-- **ReDoc**: http://localhost:5000/openapi/redoc
-- **OpenAPI JSON**: http://localhost:5000/openapi/openapi.json
+- **API**: http://localhost:4000
+- **Swagger UI**: http://localhost:4000/openapi/swagger
+- **ReDoc**: http://localhost:4000/openapi/redoc
+- **OpenAPI JSON**: http://localhost:4000/openapi/openapi.json
 
 ## 🧪 Test the API
 
 ### Health Check
 
 ```bash
-curl http://localhost:5000/health
+curl http://localhost:4000/health
 ```
 
 ### List Templates
 
 ```bash
-curl http://localhost:5000/templates
+curl http://localhost:4000/templates
 ```
 
 ### Get a Template
 
 ```bash
-curl http://localhost:5000/templates/aws/splunk_minimal_aws
+curl http://localhost:4000/templates/aws/splunk_minimal_aws
 ```
 
 ### Build an Attack Range (Two-Phase Process)
@@ -78,7 +78,7 @@ Attack Range build happens in two phases with VPN setup in between:
 
 ```bash
 # Start the build
-curl -X POST http://localhost:5000/attack-range/build \
+curl -X POST http://localhost:4000/attack-range/build \
   -H "Content-Type: application/json" \
   -d '{"template": "aws/splunk_minimal_aws"}'
   
@@ -90,10 +90,10 @@ curl -X POST http://localhost:5000/attack-range/build \
 
 ```bash
 # Check status (replace {attack_range_id} with actual ID)
-curl http://localhost:5000/attack-range/status/{attack_range_id}
+curl http://localhost:4000/attack-range/status/{attack_range_id}
 
 # When status is "wait_for_vpn", download the WireGuard config:
-curl -s http://localhost:5000/attack-range/status/{attack_range_id} | \
+curl -s http://localhost:4000/attack-range/status/{attack_range_id} | \
   jq -r '.wireguard_config' > attack_range.conf
 
 # Activate the VPN using the config file
@@ -104,22 +104,22 @@ curl -s http://localhost:5000/attack-range/status/{attack_range_id} | \
 
 ```bash
 # After connecting to VPN, continue the build
-curl -X POST http://localhost:5000/attack-range/build \
+curl -X POST http://localhost:4000/attack-range/build \
   -H "Content-Type: application/json" \
   -d '{"attack_range_id": "{attack_range_id}"}'
 
 # Monitor status until "running"
-curl http://localhost:5000/attack-range/status/{attack_range_id}
+curl http://localhost:4000/attack-range/status/{attack_range_id}
 ```
 
 ### Destroy an Attack Range
 
 ```bash
 # List saved configs
-curl http://localhost:5000/configs
+curl http://localhost:4000/configs
 
 # Destroy by config ID
-curl -X POST http://localhost:5000/attack-range/destroy \
+curl -X POST http://localhost:4000/attack-range/destroy \
   -H "Content-Type: application/json" \
   -d '{"config_id": "your-config-id-here"}'
 ```
@@ -127,7 +127,7 @@ curl -X POST http://localhost:5000/attack-range/destroy \
 ## 📚 Next Steps
 
 - Read the full [README.md](README.md) for detailed documentation
-- Explore the interactive API docs at http://localhost:5000/openapi/swagger
+- Explore the interactive API docs at http://localhost:4000/openapi/swagger
 - Check out the example Python client code in the README
 
 ## ⚙️ Configuration
@@ -171,8 +171,8 @@ export GCP_PROJECT_ID=your_project_id
 ### Port already in use
 
 ```bash
-# Find and kill the process using port 5000
-lsof -ti:5000 | xargs kill -9
+# Find and kill the process using port 4000
+lsof -ti:4000 | xargs kill -9
 ```
 
 ### Dependencies not installing

@@ -14,7 +14,7 @@ A modern web interface for managing Attack Range deployments, built with Astro.
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Flask API running on `http://localhost:5000` (or configure `PUBLIC_API_URL`)
+- Flask API running on `http://localhost:4000` (or configure `PUBLIC_API_URL`)
 
 ### Installation
 
@@ -37,7 +37,7 @@ The frontend will be available at `http://localhost:4321` (default Astro port).
 Create a `.env` file in the `app` directory to configure the API URL:
 
 ```env
-PUBLIC_API_URL=http://localhost:5000
+PUBLIC_API_URL=http://localhost:4000
 ```
 
 ### Build

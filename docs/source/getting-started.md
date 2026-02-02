@@ -24,7 +24,7 @@ Docker Compose runs the API, web app, and (optionally) the CLI without installin
 
    This starts:
 
-   - **API** on port **5000**
+   - **API** on port **4000**
    - **Web app** on port **4321**
 
 2. **Open the web app:** [http://localhost:4321](http://localhost:4321)
@@ -53,11 +53,11 @@ Docker Compose runs the API, web app, and (optionally) the CLI without installin
 - **Simulate:** Run Atomic Red Team techniques against a server in a running range (attack range ID, target server, technique list).
 - **Share:** Generate a new WireGuard config for a named user; config is saved and shown for sharing.
 
-The app talks to the API at `http://localhost:5000` (or `PUBLIC_API_URL` in Docker).
+The app talks to the API at `http://localhost:4000` (or `PUBLIC_API_URL` in Docker).
 
 ## Using the API
 
-The REST API runs on port **5000** and provides:
+The REST API runs on port **4000** and provides:
 
 - **Health:** `GET /health`
 - **Build (two-phase):** `POST /attack-range/build` with `template` (phase 1) or `attack_range_id` (phase 2 after VPN).
@@ -72,8 +72,8 @@ The REST API runs on port **5000** and provides:
 
 Interactive API docs:
 
-- **Swagger UI:** [http://localhost:5000/openapi/swagger](http://localhost:5000/openapi/swagger)
-- **OpenAPI JSON:** [http://localhost:5000/openapi/openapi.json](http://localhost:5000/openapi/openapi.json)
+- **Swagger UI:** [http://localhost:4000/openapi/swagger](http://localhost:4000/openapi/swagger)
+- **OpenAPI JSON:** [http://localhost:4000/openapi/openapi.json](http://localhost:4000/openapi/openapi.json)
 
 All build/destroy operations are asynchronous: you get an `attack_range_id` and poll the status endpoint until the range is `running` or `error`.
 

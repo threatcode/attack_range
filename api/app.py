@@ -49,6 +49,8 @@ from api.models import (
     SimulateResponse,
     ShareRequest,
     ShareResponse,
+    UpdateNameRequest,
+    UpdateNameResponse,
 )
 
 # Disable macOS fork safety warning
@@ -995,6 +997,11 @@ def get_attack_range_status(path: AttackRangeIdPath):
             # Merge sharing from config (e.g. after a share) when available
             if operation and general.get("sharing") and isinstance(general.get("sharing"), dict):
                 operation["sharing"] = general["sharing"]
+            # Load attack_range_name from config
+            if operation:
+                attack_range_name = general.get("attack_range_name")
+                if attack_range_name:
+                    operation["attack_range_name"] = attack_range_name
     
     # If not in running_operations, try to load from config file
     if not operation:
@@ -1215,6 +1222,9 @@ def load_operation_from_config(config_path: str) -> Optional[Dict[str, Any]]:
         # Get template name from config (stored as general.name)
         template_name = general.get("name")
         
+        # Get attack range name from config (stored as general.attack_range_name)
+        attack_range_name = general.get("attack_range_name")
+        
         # Build operation dict
         operation_dict = {
             "type": "build",
@@ -1226,6 +1236,10 @@ def load_operation_from_config(config_path: str) -> Optional[Dict[str, Any]]:
         # Add template name if available
         if template_name:
             operation_dict["template_name"] = template_name
+        
+        # Add attack range name if available
+        if attack_range_name:
+            operation_dict["attack_range_name"] = attack_range_name
         
         # Add timestamps if available
         if general.get("start_time"):
@@ -1340,6 +1354,11 @@ def list_attack_ranges():
                         template_name = general.get("name")
                         if template_name:
                             operation_dict["template_name"] = template_name
+                    
+                    # Load attack_range_name from config file
+                    attack_range_name = general.get("attack_range_name")
+                    if attack_range_name:
+                        operation_dict["attack_range_name"] = attack_range_name
             
             # If running and has config_file, load architecture and Guacamole info
             if operation_dict.get("status") == "running" and op.get("result") and op["result"].get("config_file"):
@@ -1544,6 +1563,64 @@ def share_attack_range(body: ShareRequest):
         return jsonify(ErrorResponse(
             message="Failed to share attack range",
             details=traceback.format_exc()
+        ).model_dump()), 500
+
+
+@app.post(
+    "/attack-range/update-name",
+    tags=[attack_range_tag],
+    responses={200: UpdateNameResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse},
+    summary="Update attack range name",
+    description="Update the attack_range_name in the config file. Requires status running."
+)
+def update_attack_range_name(body: UpdateNameRequest):
+    """Update the attack range name in the config file."""
+    try:
+        config_path = os.path.join(CONFIG_DIR, f"{body.attack_range_id}.yml")
+        if not os.path.exists(config_path):
+            return jsonify(ErrorResponse(
+                message=f"Attack range with ID '{body.attack_range_id}' not found",
+                details=f"Config file not found: {config_path}"
+            ).model_dump()), 404
+
+        config = load_yaml_file(config_path)
+        if not config:
+            return jsonify(ErrorResponse(
+                message=f"Failed to load config for attack range '{body.attack_range_id}'"
+            ).model_dump()), 500
+
+        # Validate attack range is running
+        status = config.get("general", {}).get("status", "")
+        if status != "running":
+            return jsonify(ErrorResponse(
+                message=f"Cannot update name. Attack range status is '{status}'. Must be 'running'."
+            ).model_dump()), 400
+
+        # Update attack_range_name in config
+        if "general" not in config:
+            config["general"] = {}
+        config["general"]["attack_range_name"] = body.attack_range_name
+
+        # Save updated config
+        save_yaml_file(config_path, config)
+
+        return jsonify(UpdateNameResponse(
+            status="success",
+            message=f"Attack range name updated to '{body.attack_range_name}'",
+            attack_range_id=body.attack_range_id,
+            attack_range_name=body.attack_range_name
+        ).model_dump()), 200
+
+    except ValueError as e:
+        return jsonify(ErrorResponse(
+            message="Update name validation failed",
+            details=str(e)
+        ).model_dump()), 400
+    except Exception as e:
+        import traceback
+        return jsonify(ErrorResponse(
+            message="Failed to update attack range name",
+            details=f"{str(e)}\n\n{traceback.format_exc()}"
         ).model_dump()), 500
 
 

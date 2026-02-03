@@ -21,12 +21,25 @@ if (id) {
 }
 ---
 
-<BaseLayout title={attackRange ? `Attack Range ${attackRange.attack_range_id}` : 'Attack Range Details'} currentPath="/attack-ranges">
+<BaseLayout title={attackRange ? (attackRange.attack_range_name || `Attack Range ${attackRange.attack_range_id}`) : 'Attack Range Details'} currentPath="/attack-ranges">
 	<div class="page-header">
 		<a href="/attack-ranges" class="back-button">
 			← Back to Attack Ranges
 		</a>
-		<h1>Attack Range Details</h1>
+		<div class="title-row">
+			{attackRange && attackRange.status === 'running' ? (
+				<span class="editable-name" data-id={attackRange.attack_range_id}>
+					<h1 class="editable-title">{attackRange.attack_range_name || 'Attack Range Details'}</h1>
+					<button class="edit-name-btn" type="button" title="Edit name">
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<path d="M11.333 2.00001C11.5084 1.82445 11.7163 1.68605 11.9447 1.59331C12.1731 1.50057 12.4173 1.45557 12.6637 1.46131C12.91 1.46705 13.1519 1.52337 13.375 1.62668C13.5981 1.72999 13.7975 1.87797 13.9613 2.04176C14.1251 2.20554 14.2501 2.40494 14.3534 2.62805C14.4567 2.85116 14.513 3.09305 14.5188 3.33939C14.5245 3.58573 14.4795 3.82994 14.3868 4.05834C14.294 4.28674 14.1556 4.49464 13.98 4.67001L13.333 5.31668L10.6867 2.67001L11.333 2.00001ZM9.54 3.79334L12.1867 6.44001L6.18667 12.44H3.54V9.79334L9.54 3.79334Z" fill="currentColor"/>
+						</svg>
+					</button>
+				</span>
+			) : (
+				<h1>{attackRange && attackRange.attack_range_name ? attackRange.attack_range_name : 'Attack Range Details'}</h1>
+			)}
+		</div>
 		{attackRange && (
 			<p class="subtitle">{attackRange.attack_range_id || 'Unknown ID'}</p>
 		)}
@@ -220,7 +233,17 @@ if (id) {
 										<td class="cred-server">{c.server ?? '—'}</td>
 										<td class="cred-username">{c.username}</td>
 										<td class="cred-password">
-											<code>{c.password}</code>
+											<div class="password-cell">
+												<code>{c.password}</code>
+												<button 
+													type="button" 
+													class="copy-password-btn" 
+													data-password={c.password}
+													title="Copy password"
+												>
+													Copy
+												</button>
+											</div>
 										</td>
 									</tr>
 								))}
@@ -411,6 +434,29 @@ if (id) {
 					sessionStorage.setItem(storageKey, (details as HTMLDetailsElement).open ? 'true' : 'false');
 				});
 			}
+		});
+
+		// Handle password copy buttons
+		const passwordCopyButtons = document.querySelectorAll('.copy-password-btn');
+		passwordCopyButtons.forEach((button) => {
+			button.addEventListener('click', async () => {
+				const password = (button as HTMLElement).dataset.password;
+				if (password && navigator.clipboard) {
+					try {
+						await navigator.clipboard.writeText(password);
+						const btn = button as HTMLButtonElement;
+						const originalText = btn.textContent;
+						btn.textContent = 'Copied!';
+						btn.classList.add('copied');
+						setTimeout(() => {
+							btn.textContent = originalText;
+							btn.classList.remove('copied');
+						}, 2000);
+					} catch (err) {
+						console.error('Failed to copy password:', err);
+					}
+				}
+			});
 		});
 
 		// Handle share button and modal
@@ -785,6 +831,143 @@ if (id) {
 				});
 			}
 		}
+
+		// Handle editable name
+		const editableName = document.querySelector('.editable-name');
+		if (editableName) {
+			const attackRangeId = (editableName as HTMLElement).dataset.id;
+			const titleH1 = editableName.querySelector('.editable-title') as HTMLElement;
+			const editBtn = editableName.querySelector('.edit-name-btn') as HTMLButtonElement;
+			let isEditing = false;
+
+			const startEditing = () => {
+				if (isEditing) return;
+				isEditing = true;
+				
+				const currentName = titleH1.textContent || '';
+				const input = document.createElement('input');
+				input.type = 'text';
+				input.value = currentName === 'Attack Range Details' ? '' : currentName;
+				input.className = 'name-input';
+				input.style.padding = '0.5rem 0.75rem';
+				input.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+				input.style.borderRadius = '8px';
+				input.style.background = 'rgba(30, 41, 59, 0.8)';
+				input.style.color = '#e2e8f0';
+				input.style.fontSize = '2.5rem';
+				input.style.fontWeight = '700';
+				input.style.fontFamily = 'inherit';
+				input.style.minWidth = '300px';
+				input.style.width = '100%';
+				input.style.marginRight = '0.75rem';
+				
+				const buttonGroup = document.createElement('div');
+				buttonGroup.className = 'name-edit-buttons';
+				buttonGroup.style.display = 'flex';
+				buttonGroup.style.gap = '0.5rem';
+				buttonGroup.style.alignItems = 'center';
+				
+				const saveBtn = document.createElement('button');
+				saveBtn.textContent = 'Save';
+				saveBtn.className = 'save-name-btn';
+				saveBtn.style.padding = '0.5rem 1rem';
+				saveBtn.style.background = 'rgba(59, 130, 246, 0.2)';
+				saveBtn.style.color = '#60a5fa';
+				saveBtn.style.border = '1px solid rgba(59, 130, 246, 0.3)';
+				saveBtn.style.borderRadius = '8px';
+				saveBtn.style.cursor = 'pointer';
+				saveBtn.style.fontSize = '0.875rem';
+				saveBtn.style.fontWeight = '500';
+				saveBtn.style.transition = 'all 0.2s';
+				
+				const cancelBtn = document.createElement('button');
+				cancelBtn.textContent = 'Cancel';
+				cancelBtn.className = 'cancel-name-btn';
+				cancelBtn.style.padding = '0.5rem 1rem';
+				cancelBtn.style.background = 'transparent';
+				cancelBtn.style.color = '#94a3b8';
+				cancelBtn.style.border = '1px solid rgba(148, 163, 184, 0.3)';
+				cancelBtn.style.borderRadius = '8px';
+				cancelBtn.style.cursor = 'pointer';
+				cancelBtn.style.fontSize = '0.875rem';
+				cancelBtn.style.fontWeight = '500';
+				cancelBtn.style.transition = 'all 0.2s';
+				
+				buttonGroup.appendChild(saveBtn);
+				buttonGroup.appendChild(cancelBtn);
+				
+				titleH1.style.display = 'none';
+				editBtn.style.display = 'none';
+				
+				editableName.style.display = 'flex';
+				editableName.style.alignItems = 'center';
+				editableName.style.flexWrap = 'wrap';
+				editableName.style.gap = '0.75rem';
+				editableName.appendChild(input);
+				editableName.appendChild(buttonGroup);
+				
+				input.focus();
+				input.select();
+				
+				const finishEditing = () => {
+					isEditing = false;
+					input.remove();
+					buttonGroup.remove();
+					titleH1.style.display = '';
+					editBtn.style.display = '';
+					editableName.style.display = '';
+				};
+				
+				const saveName = async () => {
+					const newName = input.value.trim();
+					if (!attackRangeId) return;
+					
+					saveBtn.disabled = true;
+					saveBtn.textContent = 'Saving...';
+					
+					try {
+						const response = await fetch(`${API_BASE_URL}/attack-range/update-name`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ 
+								attack_range_id: attackRangeId, 
+								attack_range_name: newName || 'Attack Range Details'
+							}),
+						});
+						
+						if (!response.ok) {
+							const error = await response.json();
+							throw new Error(error.details || error.message || 'Failed to update name');
+						}
+						
+						titleH1.textContent = newName || 'Attack Range Details';
+						// Update document title
+						document.title = newName || `Attack Range ${attackRangeId}`;
+						
+						finishEditing();
+					} catch (err) {
+						alert(`Error: ${err instanceof Error ? err.message : 'Failed to update name'}`);
+						saveBtn.disabled = false;
+						saveBtn.textContent = 'Save';
+					}
+				};
+				
+				saveBtn.addEventListener('click', saveName);
+				cancelBtn.addEventListener('click', finishEditing);
+				input.addEventListener('keydown', (e) => {
+					if (e.key === 'Enter') {
+						saveName();
+					} else if (e.key === 'Escape') {
+						finishEditing();
+					}
+				});
+			};
+			
+			editBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				startEditing();
+			});
+		}
 	});
 </script>
 
@@ -826,8 +1009,27 @@ if (id) {
 		text-decoration: underline;
 	}
 
+	.title-row {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.75rem;
+		flex-wrap: wrap;
+	}
+
 	.page-header h1 {
-		margin: 0 0 0.75rem;
+		margin: 0;
+		font-size: 2.5rem;
+		font-weight: 700;
+		background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+		letter-spacing: -0.02em;
+	}
+
+	.editable-title {
+		margin: 0;
 		font-size: 2.5rem;
 		font-weight: 700;
 		background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
@@ -944,6 +1146,63 @@ if (id) {
 		font-size: 0.9375rem;
 	}
 
+	.editable-name {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		width: 100%;
+	}
+
+	.edit-name-btn {
+		background: rgba(30, 41, 59, 0.6);
+		border: 1px solid rgba(148, 163, 184, 0.2);
+		color: #94a3b8;
+		cursor: pointer;
+		padding: 0.5rem;
+		border-radius: 8px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+		flex-shrink: 0;
+	}
+
+	.edit-name-btn:hover {
+		background: rgba(59, 130, 246, 0.15);
+		border-color: rgba(59, 130, 246, 0.3);
+		color: #60a5fa;
+	}
+
+	.edit-name-btn svg {
+		display: block;
+	}
+
+	.name-input {
+		outline: none;
+		flex: 1;
+	}
+
+	.name-input:focus {
+		border-color: #60a5fa !important;
+		box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
+	}
+
+	.name-edit-buttons {
+		flex-shrink: 0;
+	}
+
+	.save-name-btn:hover:not(:disabled) {
+		background: rgba(59, 130, 246, 0.3) !important;
+		border-color: rgba(59, 130, 246, 0.5) !important;
+		color: #93c5fd !important;
+	}
+
+	.cancel-name-btn:hover {
+		background: rgba(148, 163, 184, 0.1) !important;
+		color: #cbd5e1 !important;
+		border-color: rgba(148, 163, 184, 0.4) !important;
+	}
+
 	.credentials-section .credentials-description {
 		margin: 0 0 1rem;
 		color: #94a3b8;
@@ -995,12 +1254,49 @@ if (id) {
 		font-size: 0.8125rem;
 	}
 
+	.cred-password {
+		position: relative;
+	}
+
+	.password-cell {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
 	.cred-password code {
 		background: rgba(15, 23, 42, 0.6);
 		padding: 0.25rem 0.5rem;
 		border-radius: 4px;
 		font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'Courier New', monospace;
 		font-size: 0.8125rem;
+		flex: 1;
+	}
+
+	.copy-password-btn {
+		padding: 0.25rem 0.625rem;
+		background: rgba(59, 130, 246, 0.15);
+		color: #60a5fa;
+		border: 1px solid rgba(59, 130, 246, 0.3);
+		border-radius: 4px;
+		font-size: 0.75rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+		white-space: nowrap;
+		flex-shrink: 0;
+	}
+
+	.copy-password-btn:hover {
+		background: rgba(59, 130, 246, 0.25);
+		border-color: rgba(59, 130, 246, 0.5);
+		color: #93c5fd;
+	}
+
+	.copy-password-btn.copied {
+		background: rgba(16, 185, 129, 0.2);
+		border-color: rgba(16, 185, 129, 0.4);
+		color: #34d399;
 	}
 
 	.vpn-section,

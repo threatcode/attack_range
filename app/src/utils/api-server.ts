@@ -44,6 +44,7 @@ export interface AttackRange {
 	start_time?: string;
 	end_time?: string;
 	attack_range_id?: string;
+	attack_range_name?: string;
 	template_name?: string;
 	router_public_ip?: string;
 	wireguard_config?: string;

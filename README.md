@@ -1,7 +1,9 @@
 # Splunk Attack Range
-![Attack Range Log](docs/attack_range.png)
+![Attack Range Logo](docs/attack_range.png)
 
 The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP), simulates attacks, and forwards data into Splunk for detection development and testing.
+
+![Attack Range Architecture](docs/attack_range_architecture.png)
 
 **What it does:**
 

@@ -36,6 +36,7 @@ try {
 			<table class="attack-ranges-table">
 				<thead>
 					<tr>
+						<th>Name</th>
 						<th>Attack Range ID</th>
 						<th>Template Name</th>
 						<th>Status</th>
@@ -50,6 +51,7 @@ try {
 								data-status={ar.status}
 								data-id={ar.attack_range_id}
 							>
+								<td class="col-name">{ar.attack_range_name || 'Unnamed'}</td>
 								<td class="col-id">{ar.attack_range_id || 'Unknown ID'}</td>
 								<td class="col-template">
 									{ar.template_name || 'N/A'}
@@ -273,6 +275,11 @@ try {
 
 	.table-row[data-status="error"]:hover {
 		background: rgba(239, 68, 68, 0.2);
+	}
+
+	.col-name {
+		font-weight: 500;
+		color: #e2e8f0;
 	}
 
 	.col-id {

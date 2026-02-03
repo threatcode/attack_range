@@ -74,6 +74,7 @@ class OperationStatusResponse(BaseModel):
     start_time: Optional[str] = Field(None, description="Time when operation started")
     end_time: Optional[str] = Field(None, description="Time when operation ended")
     attack_range_id: Optional[str] = Field(None, description="Attack range ID")
+    attack_range_name: Optional[str] = Field(None, description="Attack range name (from general.attack_range_name)")
     template_name: Optional[str] = Field(None, description="Template name used for this attack range")
     router_public_ip: Optional[str] = Field(None, description="Router public IP address")
     wireguard_config: Optional[str] = Field(None, description="WireGuard VPN configuration (available during wait_for_vpn status)")
@@ -227,3 +228,25 @@ class ShareResponse(BaseModel):
     name: str = Field(..., description="Share name")
     config: str = Field(..., description="WireGuard configuration for the shared client")
     message: str = Field(..., description="Status message")
+
+
+class UpdateNameRequest(BaseModel):
+    """Request model for updating attack range name."""
+    attack_range_id: str = Field(..., description="Attack range ID")
+    attack_range_name: str = Field(..., description="New attack range name")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "attack_range_id": "550e8400-e29b-41d4-a716-446655440000",
+                "attack_range_name": "My Attack Range"
+            }
+        }
+
+
+class UpdateNameResponse(BaseModel):
+    """Response model for update name operation."""
+    status: str = Field(..., description="Operation status")
+    message: str = Field(..., description="Status message")
+    attack_range_id: str = Field(..., description="Attack range ID")
+    attack_range_name: str = Field(..., description="Updated attack range name")

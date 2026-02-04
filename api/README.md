@@ -215,7 +215,7 @@ Get the content of a specific template.
   "provider": "aws",
   "content": {
     "general": {
-      "attack_range_password": "Pl3ase-k1Ll-me:p",
+      "attack_range_password": "changeme123!",
       ...
     },
     ...

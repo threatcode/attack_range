@@ -1,5 +1,5 @@
 general:
-  attack_range_password: Pl3ase-k1Ll-me:p
+  attack_range_password: changeme123!
   cloud_provider: aws
   attack_range_name: ar
   ip_whitelist: 0.0.0.0/0
@@ -20,23 +20,23 @@ attack_range:
   roles:
   - role: P4T12ICK.ludus_ar_splunk
     vars:
-      ludus_ar_splunk_password: Pl3ase-k1Ll-me:p
+      ludus_ar_splunk_password: changeme123!
   - role: P4T12ICK.ar_guacamole
     vars:
-      ar_guacamole_password: Pl3ase-k1Ll-me:p
+      ar_guacamole_password: changeme123!
       ar_guacamole_servers:
         - name: splunk
           protocol: ssh
           hostname: 10.0.2.10
           port: 22
           username: ubuntu
-          password: Pl3ase-k1Ll-me:p
+          password: changeme123!
         - name: windows_server
           protocol: rdp
           hostname: 10.0.2.11
           port: 3389
           username: Administrator
-          password: Pl3ase-k1Ll-me:p
+          password: changeme123!
         - name: kali
           protocol: vnc
           hostname: 10.0.2.12
@@ -52,7 +52,7 @@ attack_range:
   roles:
   - role: P4T12ICK.ludus_ar_windows
     vars:
-      ludus_ar_windows_password: Pl3ase-k1Ll-me:p
+      ludus_ar_windows_password: changeme123!
       ludus_ar_windows_splunk_ip: 10.0.2.10
 - name: kali
   ami_name_filter: kali-last-snapshot-amd64-*

@@ -14,7 +14,7 @@ Example (minimal):
 
 ```yaml
 general:
-  attack_range_password: "Pl3ase-k1Ll-me:p"
+  attack_range_password: "changeme123!"
   cloud_provider: aws
   attack_range_name: ar
   ip_whitelist: 0.0.0.0/0
@@ -34,7 +34,7 @@ attack_range:
     roles:
       - role: P4T12ICK.ludus_ar_splunk
         vars:
-          ludus_ar_splunk_password: "Pl3ase-k1Ll-me:p"
+          ludus_ar_splunk_password: "changeme123!"
 ```
 
 ## General section

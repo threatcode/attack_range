@@ -1,5 +1,5 @@
 general:
-  attack_range_password: Pl3ase-k1Ll-me:p
+  attack_range_password: changeme123!
   cloud_provider: aws
   attack_range_name: ar
   ip_whitelist: 0.0.0.0/0
@@ -20,23 +20,23 @@ attack_range:
   roles:
   - role: P4T12ICK.ludus_ar_splunk
     vars:
-      ludus_ar_splunk_password: Pl3ase-k1Ll-me:p
+      ludus_ar_splunk_password: changeme123!
   - role: P4T12ICK.ar_guacamole
     vars:
-      ar_guacamole_password: Pl3ase-k1Ll-me:p
+      ar_guacamole_password: changeme123!
       ar_guacamole_servers:
         - name: splunk
           protocol: ssh
           hostname: 10.0.2.10
           port: 22
           username: ubuntu
-          password: Pl3ase-k1Ll-me:p
+          password: changeme123!
         - name: linux
           protocol: ssh
           hostname: 10.0.2.11
           port: 22
           username: ubuntu
-          password: Pl3ase-k1Ll-me:p
+          password: changeme123!
 - name: linux
   ami_name_filter: ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*
   ami_owner: "099720109477"
@@ -47,5 +47,5 @@ attack_range:
   roles:
   - role: P4T12ICK.ludus_ar_linux
     vars:
-      ludus_ar_linux_splunk_password: Pl3ase-k1Ll-me:p
+      ludus_ar_linux_splunk_password: changeme123!
       ludus_ar_linux_splunk_ip: 10.0.2.10

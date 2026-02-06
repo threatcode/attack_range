@@ -30,6 +30,9 @@ const { title, currentPath = Astro.url.pathname } = Astro.props;
 					<li>
 						<a href="/attack-ranges" class="nav-link" aria-current={currentPath === '/attack-ranges' ? 'page' : undefined}>Running Attack Ranges</a>
 					</li>
+					<li>
+						<a href="https://attack-range.readthedocs.io/en/release_v5/" class="nav-link" target="_blank" rel="noopener noreferrer">Docs<span class="external-link-icon">↗</span></a>
+					</li>
 				</ul>
 			</nav>
 			<main class="main-content">
@@ -119,6 +122,20 @@ const { title, currentPath = Astro.url.pathname } = Astro.props;
 		color: #60a5fa;
 		border-left-color: #3b82f6;
 		font-weight: 600;
+	}
+
+	.external-link-icon {
+		display: inline-block;
+		margin-left: 0.375rem;
+		font-size: 0.75rem;
+		opacity: 0.7;
+		transition: opacity 0.2s, transform 0.2s;
+		vertical-align: middle;
+	}
+
+	.nav-link:hover .external-link-icon {
+		opacity: 1;
+		transform: translate(2px, -2px);
 	}
 
 	.main-content {

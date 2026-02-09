@@ -32,7 +32,7 @@ variable "private_ip" {
 variable "root_volume_type" {
   description = "Root volume type."
   type        = string
-  default     = "gp2"
+  default     = "gp3"
 }
 
 variable "root_volume_size" {

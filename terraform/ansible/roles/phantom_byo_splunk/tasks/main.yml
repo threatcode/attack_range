@@ -1,4 +1,0 @@
----
-
-- include_tasks: config.yml
-  when: phantom_server.phantom_byo == "1"

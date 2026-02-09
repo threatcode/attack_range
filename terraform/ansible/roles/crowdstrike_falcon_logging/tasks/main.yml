@@ -1,9 +1,0 @@
----
-
-- include_tasks: config.yml
-  when: general.crowdstrike_falcon == "1"
-
-- name: restart splunk
-  service: name=splunk state=restarted
-  become: yes
-  when: general.crowdstrike_falcon == "1"

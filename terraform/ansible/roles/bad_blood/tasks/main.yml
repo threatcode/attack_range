@@ -1,7 +1,0 @@
----
-
-- include_tasks: "install_badblood.yml"
-  when: windows_servers.bad_blood == "1"
-
-- include_tasks: "run_badblood.yml"
-  when: windows_servers.bad_blood == "1"

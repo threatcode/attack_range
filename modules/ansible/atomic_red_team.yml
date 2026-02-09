@@ -1,4 +1,0 @@
-- hosts: all
-  gather_facts: True
-  roles:
-    - atomic_red_team

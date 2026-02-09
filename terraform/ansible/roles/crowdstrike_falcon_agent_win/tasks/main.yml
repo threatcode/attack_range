@@ -1,4 +1,0 @@
----
-
-- include_tasks: crowdstrike_install.yml
-  when: windows_servers.install_crowdstrike == "1"

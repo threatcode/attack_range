@@ -1,3 +1,0 @@
-
-- include_tasks: windows-create-domain.yml
-  when: windows_servers.create_domain == "1"

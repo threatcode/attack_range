@@ -1,8 +1,8 @@
 """
 AWS cloud provider implementation.
 
-This module contains AWS-specific operations for managing S3 buckets,
-DynamoDB tables, and EC2 key pairs.
+This module contains AWS-specific operations for managing S3 buckets
+and EC2 key pairs.
 """
 
 import sys
@@ -214,149 +214,40 @@ class AWSProvider(BaseCloudProvider):
         except Exception as e:
             self.logger.warning(f"Failed to delete S3 bucket '{bucket_name}': {e}")
 
-    def check_dynamodb_table(self, table_name: str, region: str) -> bool:
-        """
-        Check if a DynamoDB table exists.
-
-        :param table_name: Name of the DynamoDB table
-        :param region: AWS region
-        :return: True if table exists, False otherwise
-        """
-        dynamodb_client = boto3.client('dynamodb', region_name=region)
-        try:
-            response = dynamodb_client.describe_table(TableName=table_name)
-            table_status = response['Table']['TableStatus']
-            return table_status in ['ACTIVE', 'CREATING', 'UPDATING']
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', '')
-            if error_code == 'ResourceNotFoundException':
-                return False
-            else:
-                self.logger.warning(f"Error checking DynamoDB table '{table_name}': {e}")
-                return False
-        except Exception:
-            return False
-
-    def create_dynamodb_table(self, table_name: str, region: str) -> None:
-        """
-        Create a DynamoDB table for Terraform state locking.
-
-        :param table_name: Name of the DynamoDB table to create
-        :param region: AWS region where the table should be created
-        """
-        dynamodb_client = boto3.client('dynamodb', region_name=region)
-
-        try:
-            dynamodb_client.create_table(
-                TableName=table_name,
-                KeySchema=[
-                    {
-                        'AttributeName': 'LockID',
-                        'KeyType': 'HASH'  # Partition key
-                    }
-                ],
-                AttributeDefinitions=[
-                    {
-                        'AttributeName': 'LockID',
-                        'AttributeType': 'S'
-                    }
-                ],
-                BillingMode='PAY_PER_REQUEST'  # Use on-demand billing
-            )
-
-            # Wait for table to be created
-            waiter = dynamodb_client.get_waiter('table_exists')
-            waiter.wait(TableName=table_name, WaiterConfig={'Delay': 2, 'MaxAttempts': 30})
-
-            self.logger.info(f"Created DynamoDB table '{table_name}' in region '{region}'")
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', '')
-            if error_code == 'ResourceInUseException':
-                self.logger.info(f"DynamoDB table '{table_name}' already exists")
-            else:
-                self.logger.error(f"Failed to create DynamoDB table '{table_name}': {e}")
-                sys.exit(1)
-        except Exception as e:
-            self.logger.error(f"Failed to create DynamoDB table '{table_name}': {e}")
-            sys.exit(1)
-
-    def delete_dynamodb_table(self, table_name: str, region: str) -> None:
-        """
-        Delete a DynamoDB table.
-
-        :param table_name: Name of the DynamoDB table to delete
-        :param region: AWS region
-        """
-        dynamodb_client = boto3.client('dynamodb', region_name=region)
-
-        try:
-            # Check if table exists
-            if not self.check_dynamodb_table(table_name, region):
-                self.logger.info(f"DynamoDB table '{table_name}' does not exist. Skipping deletion.")
-                return
-
-            self.logger.info(f"Deleting DynamoDB table '{table_name}'...")
-
-            # Delete the table
-            dynamodb_client.delete_table(TableName=table_name)
-
-            # Wait for table to be deleted
-            waiter = dynamodb_client.get_waiter('table_not_exists')
-            waiter.wait(TableName=table_name, WaiterConfig={'Delay': 2, 'MaxAttempts': 30})
-
-            self.logger.info(f"Successfully deleted DynamoDB table '{table_name}'")
-
-        except ClientError as e:
-            error_code = e.response.get('Error', {}).get('Code', '')
-            if error_code == 'ResourceNotFoundException':
-                self.logger.info(f"DynamoDB table '{table_name}' does not exist")
-            else:
-                self.logger.warning(f"Failed to delete DynamoDB table '{table_name}': {e}")
-        except Exception as e:
-            self.logger.warning(f"Failed to delete DynamoDB table '{table_name}': {e}")
-
     def check_backend_exists(self, backend_name: str) -> bool:
         """
-        Check if AWS backend (S3 bucket + DynamoDB table) exists.
+        Check if AWS backend (S3 bucket) exists.
 
         :param backend_name: Name of the backend
-        :return: True if both S3 bucket and DynamoDB table exist
+        :return: True if S3 bucket exists
         """
         region = self.get_region(required=True)
         bucket_name = self.sanitize_name(backend_name)
-        table_name = self.sanitize_name(backend_name)
 
-        return self.check_s3_bucket(bucket_name, region) and \
-               self.check_dynamodb_table(table_name, region)
+        return self.check_s3_bucket(bucket_name, region)
 
     def create_backend(self, backend_name: str, region: str) -> None:
         """
-        Create AWS backend (S3 bucket + DynamoDB table).
+        Create AWS backend (S3 bucket).
 
         :param backend_name: Name of the backend
         :param region: AWS region
         """
         bucket_name = self.sanitize_name(backend_name)
-        table_name = self.sanitize_name(backend_name)
 
         if not self.check_s3_bucket(bucket_name, region):
             self.create_s3_bucket(bucket_name, region)
 
-        if not self.check_dynamodb_table(table_name, region):
-            self.create_dynamodb_table(table_name, region)
-
     def delete_backend(self, backend_name: str, region: str) -> None:
         """
-        Delete AWS backend (S3 bucket + DynamoDB table).
+        Delete AWS backend (S3 bucket).
 
         :param backend_name: Name of the backend
         :param region: AWS region
         """
         bucket_name = self.sanitize_name(backend_name)
-        table_name = self.sanitize_name(backend_name)
 
         self.delete_s3_bucket(bucket_name, region)
-        self.delete_dynamodb_table(table_name, region)
 
     def import_ssh_key(self, key_name: str, public_key_content: str, region: str) -> None:
         """
@@ -425,7 +316,6 @@ class AWSProvider(BaseCloudProvider):
         :param backend_file_path: Path to the backend.tf file
         """
         bucket_name = backend_params['bucket_name']
-        dynamodb_table_name = backend_params['dynamodb_table_name']
         region = backend_params['region']
         attack_range_id = backend_params.get('attack_range_id', 'unknown')
         config_source = backend_params.get('config_source', 'template/config file')
@@ -437,17 +327,16 @@ class AWSProvider(BaseCloudProvider):
 # Attack Range ID: {attack_range_id}
 # Region: {region} (from aws.region in config)
 # Bucket: {bucket_name} (derived from attack_range_id)
-# DynamoDB Table: {dynamodb_table_name} (derived from attack_range_id)
 #
 # To regenerate this file, run: python main.py build -t <template>
 #
 terraform {{
   backend "s3" {{
-    bucket         = "{bucket_name}"
-    key            = "terraform.tfstate"
-    region         = "{region}"
-    dynamodb_table = "{dynamodb_table_name}"
-    encrypt        = true
+    bucket       = "{bucket_name}"
+    key          = "terraform.tfstate"
+    region       = "{region}"
+    use_lockfile = true
+    encrypt      = true
   }}
 }}
 '''

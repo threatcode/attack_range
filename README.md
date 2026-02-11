@@ -12,7 +12,10 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
 - **Share access** — Use WireGuard VPN; generate additional client configs to share the range with others.
 
 **Click the picture to watch the demo 👇**  
-[![Watch the demo](docs/attack_range_demo.png)](https://youtu.be/FkDiiYGKjKg)
+
+<a href="https://youtu.be/FkDiiYGKjKg" target="_blank">
+  <img src="docs/attack_range_demo.png" alt="Watch the demo" />
+</a>
 
 ---
 

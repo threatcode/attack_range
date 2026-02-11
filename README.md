@@ -11,6 +11,9 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
 - **Simulate attacks** — Run Atomic Red Team (and other) techniques to generate real telemetry.
 - **Share access** — Use WireGuard VPN; generate additional client configs to share the range with others.
 
+Watch the demo
+[![Watch the demo](docs/attack_range_demo.png)](https://youtu.be/FkDiiYGKjKg)
+
 ---
 
 ## Getting started

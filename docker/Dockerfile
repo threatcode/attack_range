@@ -1,26 +1,34 @@
 FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive 
 
-RUN apt update && apt upgrade -y
-RUN apt-get install -y software-properties-common
-RUN apt update
-RUN add-apt-repository ppa:deadsnakes/ppa
-RUN apt update
-RUN apt install -y python3.12
-
-RUN apt-get install -y git unzip curl vim apt-transport-https ca-certificates gnupg lsb-release
+ARG TERRAFORM_VERSION=1.14.4
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends software-properties-common && \
+    add-apt-repository ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+        python3.12 \
+        git \
+        unzip \
+        curl \
+        vim \
+        apt-transport-https \
+        ca-certificates \
+        gnupg \
+        lsb-release && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Terraform (detect architecture and install appropriate version)
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
-        curl -s https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_arm64.zip -o terraform.zip; \
+        curl -s https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_arm64.zip -o terraform.zip; \
     else \
-        curl -s https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip -o terraform.zip; \
+        curl -s https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip -o terraform.zip; \
     fi && \
     unzip terraform.zip && \
     mv terraform /usr/local/bin/ && \
     rm -rf terraform.zip
-
+ 
 # Install AWS CLI (detect architecture and install appropriate version)
 RUN ARCH=$(uname -m) && \
     if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \

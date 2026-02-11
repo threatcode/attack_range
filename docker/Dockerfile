@@ -3,7 +3,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 ARG TERRAFORM_VERSION=1.14.4
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends software-properties-common && \
+    apt-get install -y --no-install-recommends software-properties-common gnupg && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -14,7 +14,6 @@ RUN apt-get update && \
         vim \
         apt-transport-https \
         ca-certificates \
-        gnupg \
         lsb-release && \
     rm -rf /var/lib/apt/lists/*
 

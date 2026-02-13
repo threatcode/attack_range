@@ -36,6 +36,8 @@ name = "pypi-public"
 url = "https://pypi.org/simple/"
 
 [tool.poetry.dev-dependencies]
+pytest = "^8.0"
+moto = {version = "^5.0", extras = ["s3"]}
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

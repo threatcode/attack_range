@@ -105,7 +105,8 @@ Abstract base class defining the contract for all cloud providers:
 - `delete_backend()`: Delete backend storage
 - `import_ssh_key()`: Import SSH key (if applicable)
 - `delete_ssh_key()`: Delete SSH key (if applicable)
-- `update_backend_config()`: Update backend configuration file
+- `write_backend_config()`: Create/update backend configuration file
+- `get_backend_params()`: Get backend parameters for the current provider
 
 #### AWSProvider (`cloud_providers/aws_provider.py`)
 **Responsibility**: AWS-specific operations

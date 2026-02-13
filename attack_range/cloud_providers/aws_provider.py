@@ -12,7 +12,7 @@ from botocore.exceptions import ClientError
 from typing import Optional
 import os
 
-from .base_provider import BaseCloudProvider
+from .base_provider import BaseCloudProvider, BackendParams
 
 
 class AWSProvider(BaseCloudProvider):
@@ -308,17 +308,17 @@ class AWSProvider(BaseCloudProvider):
         except Exception as e:
             self.logger.warning(f"Failed to delete key pair '{key_name}': {e}")
 
-    def update_backend_config(self, backend_params: dict, backend_file_path: str) -> None:
+    def write_backend_config(self, backend_params: BackendParams, backend_file_path: str) -> None:
         """
         Update or create backend.tf file with S3 backend configuration.
 
-        :param backend_params: Dictionary containing backend parameters
+        :param backend_params: Backend parameters
         :param backend_file_path: Path to the backend.tf file
         """
-        bucket_name = backend_params['bucket_name']
-        region = backend_params['region']
-        attack_range_id = backend_params.get('attack_range_id', 'unknown')
-        config_source = backend_params.get('config_source', 'template/config file')
+        bucket_name = backend_params.aws_bucket_name
+        region = backend_params.region
+        attack_range_id = backend_params.attack_range_id or 'unknown'
+        config_source = backend_params.config_source or 'template/config file'
 
         backend_config = f'''# This file is AUTO-GENERATED based on the template/config file.
 # DO NOT EDIT MANUALLY - changes will be overwritten.
@@ -346,22 +346,22 @@ terraform {{
 
         self.logger.info(f"Backend configuration written to {backend_file_path} (generated from {config_source})")
 
-    def get_backend_params(self, attack_range_id: str, config_source: str = "template/config file") -> dict:
+    def get_backend_params(self, attack_range_id: str, config_source: str = "template/config file") -> BackendParams:
         """
         Get backend parameters for AWS (S3 bucket).
 
         :param attack_range_id: The attack range ID for naming
         :param config_source: Source config file name for backend.tf comments
-        :return: Dictionary with backend parameters
+        :return: Backend parameters
         """
         backend_name = f"terraform-state-{attack_range_id}"
         bucket_name = self.sanitize_name(backend_name)
         region = self.get_region(required=True)
 
-        return {
-            'backend_name': backend_name,
-            'bucket_name': bucket_name,
-            'region': region,
-            'attack_range_id': attack_range_id,
-            'config_source': config_source
-        }
+        return BackendParams(
+            backend_name=backend_name,
+            aws_bucket_name=bucket_name,
+            region=region,
+            attack_range_id=attack_range_id,
+            config_source=config_source
+        )

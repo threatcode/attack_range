@@ -47,8 +47,8 @@ class BackendManager:
             config_source = os.path.basename(self.config_path)
 
         backend_params = self.cloud_provider.get_backend_params(attack_range_id, config_source)
-        backend_name = backend_params["backend_name"]
-        region = backend_params["region"]
+        backend_name = backend_params.backend_name
+        region = backend_params.region
 
         self.logger.info(f"Setting up remote backend: {backend_name}")
 
@@ -61,7 +61,7 @@ class BackendManager:
             self.logger.info(f"Backend '{backend_name}' already exists")
 
         backend_tf_path = os.path.join(self.terraform_dir, "backend.tf")
-        self.cloud_provider.update_backend_config(backend_params, backend_tf_path)
+        self.cloud_provider.write_backend_config(backend_params, backend_tf_path)
 
         self.logger.info("Remote backend setup completed successfully")
         return backend_was_created
@@ -81,8 +81,8 @@ class BackendManager:
             config_source = os.path.basename(self.config_path)
 
         backend_params = self.cloud_provider.get_backend_params(attack_range_id, config_source)
-        backend_name = backend_params["backend_name"]
-        region = backend_params["region"]
+        backend_name = backend_params.backend_name
+        region = backend_params.region
 
         self.logger.info(f"Cleaning up remote backend: {backend_name}")
         self.cloud_provider.delete_backend(backend_name, region)

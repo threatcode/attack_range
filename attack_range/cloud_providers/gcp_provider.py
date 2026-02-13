@@ -265,3 +265,25 @@ terraform {{
             f.write(backend_config)
 
         self.logger.info(f"Backend configuration written to {backend_file_path} (generated from {config_source})")
+
+    def get_backend_params(self, attack_range_id: str, config_source: str = "template/config file") -> dict:
+        """
+        Get backend parameters for GCP (GCS bucket).
+
+        :param attack_range_id: The attack range ID for naming
+        :param config_source: Source config file name for backend.tf comments
+        :return: Dictionary with backend parameters
+        """
+        backend_name = f"terraform-state-{attack_range_id}"
+        bucket_name = self.sanitize_name(backend_name)
+        project_id = self.get_project_id(required=True)
+        region = self.get_region(required=True)
+
+        return {
+            'backend_name': backend_name,
+            'bucket_name': bucket_name,
+            'project_id': project_id,
+            'region': region,
+            'attack_range_id': attack_range_id,
+            'config_source': config_source
+        }

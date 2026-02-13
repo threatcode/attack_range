@@ -110,8 +110,7 @@ Abstract base class defining the contract for all cloud providers:
 #### AWSProvider (`cloud_providers/aws_provider.py`)
 **Responsibility**: AWS-specific operations
 
-- Manages S3 buckets for state storage
-- Manages DynamoDB tables for state locking
+- Manages S3 buckets for state storage (with S3 native locking via use_lockfile)
 - Imports/deletes EC2 key pairs
 - Sanitizes names for S3 requirements
 

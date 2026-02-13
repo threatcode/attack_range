@@ -34,7 +34,7 @@ class BackendManager:
     def setup_remote_backend(self) -> bool:
         """
         Check if remote backend exists, otherwise create it.
-        For AWS: S3 bucket + DynamoDB table
+        For AWS: S3 bucket (with S3 native locking)
         For Azure: Storage Account + Container
         For GCP: GCS bucket
         Uses attack_range_id for naming the backend resources.
@@ -105,10 +105,9 @@ class BackendManager:
         else:  # aws
             backend_name = f"terraform-state-{attack_range_id}"
             bucket_name = self.cloud_provider.sanitize_name(backend_name)
-            dynamodb_table_name = self.cloud_provider.sanitize_name(backend_name)
             region = self.cloud_provider.get_region(required=True)
 
-            self.logger.info(f"Setting up remote backend: bucket={bucket_name}, table={dynamodb_table_name}")
+            self.logger.info(f"Setting up remote backend: bucket={bucket_name}")
 
             # Check and create S3 bucket if needed
             if not self.cloud_provider.check_s3_bucket(bucket_name, region):
@@ -118,23 +117,15 @@ class BackendManager:
             else:
                 self.logger.info(f"S3 bucket '{bucket_name}' already exists")
 
-            # Check and create DynamoDB table if needed
-            if not self.cloud_provider.check_dynamodb_table(dynamodb_table_name, region):
-                self.logger.info(f"DynamoDB table '{dynamodb_table_name}' does not exist. Creating it...")
-                self.cloud_provider.create_dynamodb_table(dynamodb_table_name, region)
-                backend_was_created = True
-            else:
-                self.logger.info(f"DynamoDB table '{dynamodb_table_name}' already exists")
-
             # Update backend configuration in backend.tf
-            self._update_backend_config_aws(bucket_name, dynamodb_table_name, region, attack_range_id)
+            self._update_backend_config_aws(bucket_name, region, attack_range_id)
 
             self.logger.info("Remote backend setup completed successfully")
             return backend_was_created
 
     def cleanup_remote_backend(self) -> None:
         """
-        Clean up remote backend resources (S3 bucket + DynamoDB table for AWS,
+        Clean up remote backend resources (S3 bucket for AWS,
         Storage Account for Azure, GCS bucket for GCP).
         Uses attack_range_id for naming the backend resources.
         """
@@ -173,24 +164,21 @@ class BackendManager:
         else:  # aws
             backend_name = f"terraform-state-{attack_range_id}"
             bucket_name = self.cloud_provider.sanitize_name(backend_name)
-            dynamodb_table_name = self.cloud_provider.sanitize_name(backend_name)
             region = self.cloud_provider.get_region(required=False)
 
             if not region:
                 self.logger.warning("AWS region not found in config. Cannot cleanup remote backend.")
                 return
 
-            self.logger.info(f"Cleaning up remote backend: bucket={bucket_name}, table={dynamodb_table_name}")
+            self.logger.info(f"Cleaning up remote backend: bucket={bucket_name}")
             self.cloud_provider.delete_s3_bucket(bucket_name, region)
-            self.cloud_provider.delete_dynamodb_table(dynamodb_table_name, region)
             self.logger.info("Remote backend cleanup completed successfully")
 
-    def _update_backend_config_aws(self, bucket_name: str, dynamodb_table_name: str, region: str, attack_range_id: str) -> None:
+    def _update_backend_config_aws(self, bucket_name: str, region: str, attack_range_id: str) -> None:
         """
         Update or create backend.tf file with S3 backend configuration.
 
         :param bucket_name: Name of the S3 bucket for state storage
-        :param dynamodb_table_name: Name of the DynamoDB table for state locking
         :param region: AWS region
         :param attack_range_id: Attack range ID
         """
@@ -203,7 +191,6 @@ class BackendManager:
 
         backend_params = {
             'bucket_name': bucket_name,
-            'dynamodb_table_name': dynamodb_table_name,
             'region': region,
             'attack_range_id': attack_range_id,
             'config_source': config_source

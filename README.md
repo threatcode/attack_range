@@ -122,3 +122,4 @@ We welcome feedback and contributions from the community! Please see our [contri
 * [Christopher Caldwell](https://github.com/cudgel)
 * [Zachary Christensen](https://github.com/ZachTheSplunker)
 * [JerinSaji0](https://github.com/JerinSaji0)
+* [Michal Cichorz](https://github.com/cichyx96)

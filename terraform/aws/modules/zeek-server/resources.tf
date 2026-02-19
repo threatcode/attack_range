@@ -1,6 +1,6 @@
 resource "aws_security_group" "zeek_server" {
   count       = var.zeek_server ? 1 : 0
-  name        = "${var.attack_range_id}-${var.server_name}-sg"
+  name        = "ar-${var.server_name}-${var.attack_range_id}-sg"
   description = "Security group allowing all ingress and egress traffic"
   vpc_id      = var.vpc_id
 
@@ -21,7 +21,7 @@ resource "aws_security_group" "zeek_server" {
   }
 
   tags = {
-    Name = "${var.attack_range_id}-${var.server_name}-sg"
+    Name = "ar-${var.server_name}-${var.attack_range_id}-sg"
   }
 }
 
@@ -35,7 +35,7 @@ resource "aws_instance" "zeek_sensor" {
   private_ip = var.private_ip
 
   tags = {
-    Name = "${var.attack_range_id}-${var.server_name}"
+    Name = "ar-${var.server_name}-${var.attack_range_id}"
   }
 
   root_block_device {

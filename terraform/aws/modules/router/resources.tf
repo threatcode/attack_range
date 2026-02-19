@@ -1,6 +1,6 @@
 
 resource "aws_security_group" "default" {
-  name   = "sg_router_${var.attack_range_id}"
+  name   = "ar_sg_router_${var.attack_range_id}"
   vpc_id = var.vpc_id
 
   ingress {

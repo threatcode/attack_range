@@ -2,13 +2,13 @@
 data "aws_availability_zones" "available" {}
 
 locals {
-  cluster_name = "cluster_${var.attack_range_id}"
+  cluster_name = "ar_cluster_${var.attack_range_id}"
 }
 
 module "vpc" {
   source = "terraform-aws-modules/vpc/aws"
 
-  name   = "vpc_${var.attack_range_id}"
+  name   = "ar_vpc_${var.attack_range_id}"
   cidr   = "10.0.0.0/16"
   azs    = data.aws_availability_zones.available.names
 

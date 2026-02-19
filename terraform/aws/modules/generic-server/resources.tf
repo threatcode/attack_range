@@ -1,6 +1,6 @@
 
 resource "aws_security_group" "this" {
-  name        = "${var.attack_range_id}-${var.server_name}-sg"
+  name        = "ar-${var.server_name}-${var.attack_range_id}-sg"
   description = "Security group allowing all ingress and egress traffic"
   vpc_id      = var.vpc_id
 
@@ -21,7 +21,7 @@ resource "aws_security_group" "this" {
   }
 
   tags = {
-    Name = "${var.attack_range_id}-${var.server_name}-sg"
+    Name = "ar-${var.server_name}-${var.attack_range_id}-sg"
   }
 }
 
@@ -42,7 +42,7 @@ resource "aws_instance" "this" {
   }
 
   tags = {
-    Name = "${var.attack_range_id}-${var.server_name}"
+    Name = "ar-${var.server_name}-${var.attack_range_id}"
   }
 }
 

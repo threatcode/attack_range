@@ -5,8 +5,26 @@ This module defines the abstract base class for all cloud providers.
 """
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Optional
 import logging
+
+
+@dataclass
+class BackendParams:
+    """Shared backend parameters for all cloud providers."""
+
+    backend_name: str
+    region: str
+    attack_range_id: str
+    config_source: str = "template/config file"
+    aws_bucket_name: Optional[str] = None
+    gcp_bucket_name: Optional[str] = None
+    gcp_project_id: Optional[str] = None
+    azure_storage_account_name: Optional[str] = None
+    azure_container_name: Optional[str] = None
+    azure_resource_group_name: Optional[str] = None
+    azure_location: Optional[str] = None
 
 
 class BaseCloudProvider(ABC):
@@ -94,11 +112,27 @@ class BaseCloudProvider(ABC):
         pass
 
     @abstractmethod
-    def update_backend_config(self, backend_params: dict, backend_file_path: str) -> None:
+    def write_backend_config(self, backend_params: BackendParams, backend_file_path: str) -> None:
         """
-        Update the backend configuration file.
+        Save on disk the backend configuration file.
 
-        :param backend_params: Dictionary containing backend parameters
+        :param backend_params: Backend parameters for the current provider
         :param backend_file_path: Path to the backend.tf file
+        """
+        pass
+
+    @abstractmethod
+    def get_backend_params(self, attack_range_id: str, config_source: str = "template/config file") -> BackendParams:
+        """
+        Get backend parameters for the current provider.
+
+        Returns backend parameters with all information needed for backend setup:
+        - backend_name: Sanitized name for the storage resource
+        - region: Provider-specific region/location
+        - All provider-specific parameters needed for write_backend_config()
+
+        :param attack_range_id: The attack range ID for naming
+        :param config_source: Source config file name for backend.tf comments
+        :return: Backend parameters
         """
         pass

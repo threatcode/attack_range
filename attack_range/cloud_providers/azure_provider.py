@@ -10,7 +10,7 @@ import re
 from typing import Optional
 import os
 
-from .base_provider import BaseCloudProvider
+from .base_provider import BaseCloudProvider, BackendParams
 
 # Azure imports
 try:
@@ -343,19 +343,19 @@ class AzureProvider(BaseCloudProvider):
         """
         self.logger.info("Azure: No cloud service keys to delete")
 
-    def update_backend_config(self, backend_params: dict, backend_file_path: str) -> None:
+    def write_backend_config(self, backend_params: BackendParams, backend_file_path: str) -> None:
         """
         Update or create backend.tf file with Azure backend configuration.
 
-        :param backend_params: Dictionary containing backend parameters
+        :param backend_params: Backend parameters
         :param backend_file_path: Path to the backend.tf file
         """
-        storage_account_name = backend_params['storage_account_name']
-        container_name = backend_params['container_name']
-        resource_group_name = backend_params['resource_group_name']
-        location = backend_params['location']
-        attack_range_id = backend_params.get('attack_range_id', 'unknown')
-        config_source = backend_params.get('config_source', 'template/config file')
+        storage_account_name = backend_params.azure_storage_account_name
+        container_name = backend_params.azure_container_name
+        resource_group_name = backend_params.azure_resource_group_name
+        location = backend_params.azure_location or backend_params.region
+        attack_range_id = backend_params.attack_range_id or 'unknown'
+        config_source = backend_params.config_source or 'template/config file'
 
         backend_config = f'''# This file is AUTO-GENERATED based on the template/config file.
 # DO NOT EDIT MANUALLY - changes will be overwritten.
@@ -383,3 +383,28 @@ terraform {{
             f.write(backend_config)
 
         self.logger.info(f"Backend configuration written to {backend_file_path} (generated from {config_source})")
+
+    def get_backend_params(self, attack_range_id: str, config_source: str = "template/config file") -> BackendParams:
+        """
+        Get backend parameters for Azure (Storage Account + Container).
+
+        :param attack_range_id: The attack range ID for naming
+        :param config_source: Source config file name for backend.tf comments
+        :return: Backend parameters
+        """
+        backend_name = f"terraformstate{attack_range_id.replace('-', '')}"
+        storage_account_name = self.sanitize_name(backend_name)
+        container_name = "tfstate"
+        resource_group_name = f"rg-terraform-state-{attack_range_id}"
+        location = self.get_region(required=True)
+
+        return BackendParams(
+            backend_name=backend_name,
+            azure_storage_account_name=storage_account_name,
+            azure_container_name=container_name,
+            azure_resource_group_name=resource_group_name,
+            azure_location=location,
+            region=location,
+            attack_range_id=attack_range_id,
+            config_source=config_source
+        )

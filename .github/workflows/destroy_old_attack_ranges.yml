@@ -2,6 +2,7 @@ name: destroy old attack ranges
 on:
   schedule:
     - cron: '15 13 * * *'
+  workflow_dispatch:
 
 jobs:
   destroy_old_attack_ranges:

@@ -20,6 +20,7 @@ env
 *.tfstate.*
 terraform/**/state
 attack_data
+**/.terraform.lock.hcl
 
 # IDE and OS
 .idea

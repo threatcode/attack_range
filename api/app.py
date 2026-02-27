@@ -253,7 +253,9 @@ def check_credentials_available(provider: str) -> Tuple[bool, Optional[str]]:
 
 def get_provider_availability(test_missing: Optional[str] = None) -> list:
     """
-    Get availability status for all cloud provider CLIs and credentials.
+    Get availability status for all cloud providers.
+    This implementation no longer checks local CLI installation or credentials;
+    all providers are treated as available (unless simulated as missing for tests).
     
     :param test_missing: Optional provider name to simulate as missing (for testing)
     :return: List of ProviderAvailability objects
@@ -263,53 +265,33 @@ def get_provider_availability(test_missing: Optional[str] = None) -> list:
         {"provider": "azure", "cli": "az"},
         {"provider": "gcp", "cli": "gcloud"},
     ]
-    
+
     results = []
     for provider_config in providers_config:
         provider = provider_config["provider"]
         cli_command = provider_config["cli"]
-        
+
         # If testing missing provider, simulate it as unavailable
         if test_missing and test_missing.lower() == provider.lower():
-            results.append(ProviderAvailability(
-                provider=provider,
-                available=False,
-                cli_command=cli_command,
-                error_message=f"Simulated missing CLI for testing (test_missing={test_missing})"
-            ))
-        else:
-            # First check if CLI is available
-            cli_available, cli_error = check_cli_available(cli_command)
-            
-            if not cli_available:
-                # CLI not available
-                results.append(ProviderAvailability(
+            results.append(
+                ProviderAvailability(
                     provider=provider,
                     available=False,
                     cli_command=cli_command,
-                    error_message=cli_error
-                ))
-            else:
-                # CLI is available, now check credentials
-                creds_available, creds_error = check_credentials_available(provider)
-                
-                if creds_available:
-                    # Both CLI and credentials are available
-                    results.append(ProviderAvailability(
-                        provider=provider,
-                        available=True,
-                        cli_command=cli_command,
-                        error_message=None
-                    ))
-                else:
-                    # CLI available but credentials missing
-                    results.append(ProviderAvailability(
-                        provider=provider,
-                        available=False,
-                        cli_command=cli_command,
-                        error_message=f"CLI installed but {creds_error}"
-                    ))
-    
+                    error_message=f"Simulated missing CLI for testing (test_missing={test_missing})",
+                )
+            )
+        else:
+            # Treat provider as available without performing any local CLI/credential checks
+            results.append(
+                ProviderAvailability(
+                    provider=provider,
+                    available=True,
+                    cli_command=cli_command,
+                    error_message=None,
+                )
+            )
+
     return results
 
 

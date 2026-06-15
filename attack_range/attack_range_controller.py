@@ -212,6 +212,10 @@ class AttackRangeController:
             self.logger.info("="*80 + "\n")
             return router_public_ip, wireguard_config
         else:
+            # Install lab Galaxy roles before VPN while public DNS/internet still works
+            self.ansible_manager.update_lab_playbook()
+            self.ansible_manager.ensure_playbook_roles_installed("lab.yaml")
+
             # For CLI: prompt user to connect to VPN, then continue with lab phase
             self.ansible_manager.prompt_vpn_connection()
             self.build_lab_phase(attack_range_id, router_public_ip)

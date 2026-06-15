@@ -714,6 +714,73 @@ class AnsibleManager:
         self.logger.error(f"Timeout waiting for SSH on {host}:{port} after {timeout}s")
         return False
 
+    @staticmethod
+    def _strip_dns_from_wireguard_config_content(content: str) -> str:
+        """Remove DNS= lines so wg-quick does not break public DNS on CI runners."""
+        lines = [
+            line
+            for line in content.splitlines()
+            if not re.match(r"^\s*DNS\s*=", line, re.IGNORECASE)
+        ]
+        return "\n".join(lines) + ("\n" if lines else "")
+
+    def _prepare_ci_wireguard_config(self) -> str:
+        """
+        Return a WireGuard client config path suitable for CI (no DNS override).
+
+        wg-quick applies DNS= from the client config via resolvconf/systemd-resolved,
+        which breaks outbound DNS on GitHub Actions even with split-tunnel AllowedIPs.
+        Strips DNS from client1.conf in place and restores the original on disconnect.
+        """
+        source_path = self._ci_wireguard_config_path()
+        with open(source_path, "r", encoding="utf-8") as f:
+            original = f.read()
+        stripped = self._strip_dns_from_wireguard_config_content(original)
+        if stripped != original:
+            self._ci_wireguard_config_original = original
+            with open(source_path, "w", encoding="utf-8") as f:
+                f.write(stripped)
+            self.logger.debug("CI mode: removed DNS override from WireGuard client config")
+        return source_path
+
+    def ensure_playbook_roles_installed(self, playbook_name: str, raise_on_failure: bool = False) -> None:
+        """
+        Install Ansible Galaxy roles required by a playbook.
+
+        :param playbook_name: Playbook file name under the ansible directory
+        :param raise_on_failure: If True, raise RuntimeError instead of sys.exit
+        """
+        playbook_path = os.path.join(self.ansible_dir, playbook_name)
+
+        if not os.path.exists(playbook_path):
+            error_msg = f"Playbook not found: {playbook_path}"
+            if raise_on_failure:
+                raise RuntimeError(error_msg)
+            self.logger.error(error_msg)
+            sys.exit(1)
+
+        required_roles = self._get_required_roles_for_playbook(playbook_path)
+        for role_name in required_roles:
+            is_wireguard = role_name == WIREGUARD_GALAXY_ROLE
+            if is_wireguard:
+                if self._is_role_installed(role_name):
+                    continue
+                self.logger.info(f"Installing WireGuard role '{role_name}' from Ansible Galaxy...")
+            elif not self._is_role_installed(role_name):
+                self.logger.info(f"Installing required role '{role_name}' for playbook '{playbook_name}'")
+            else:
+                continue
+            if not self.install_ansible_galaxy_role(role_name, force=not is_wireguard):
+                error_msg = f"Failed to install required role '{role_name}' for playbook '{playbook_name}'"
+                if raise_on_failure:
+                    raise RuntimeError(error_msg)
+                self.logger.error(error_msg)
+                sys.exit(1)
+
+        if WIREGUARD_GALAXY_ROLE in required_roles:
+            self._patch_wireguard_allowed_ips()
+            self._patch_wireguard_server_config()
+
     def run_ansible_playbook(self, playbook_name: str, extra_vars: dict = None) -> None:
         """
         Run an ansible playbook using ansible_runner.
@@ -727,25 +794,7 @@ class AnsibleManager:
             self.logger.error(f"Playbook not found: {playbook_path}")
             sys.exit(1)
 
-        # Ensure required roles for the playbook are installed
-        required_roles = self._get_required_roles_for_playbook(playbook_path)
-        for role_name in required_roles:
-            is_wireguard = role_name == WIREGUARD_GALAXY_ROLE
-            if is_wireguard:
-                if self._is_role_installed(role_name):
-                    continue  # Use existing WireGuard role (no --force) so AllowedIPs fix in ~/.ansible stays
-                self.logger.info(f"Installing WireGuard role '{role_name}' from Ansible Galaxy...")
-            elif not self._is_role_installed(role_name):
-                self.logger.info(f"Installing required role '{role_name}' for playbook '{playbook_name}'")
-            else:
-                continue
-            if not self.install_ansible_galaxy_role(role_name, force=not is_wireguard):
-                self.logger.error(f"Failed to install required role '{role_name}' for playbook '{playbook_name}'")
-                sys.exit(1)
-
-        if WIREGUARD_GALAXY_ROLE in required_roles:
-            self._patch_wireguard_allowed_ips()
-            self._patch_wireguard_server_config()
+        self.ensure_playbook_roles_installed(playbook_name)
 
         self.logger.info(f"Running ansible playbook: {playbook_name}")
 
@@ -849,26 +898,7 @@ class AnsibleManager:
             self.logger.error(error_msg)
             raise RuntimeError(error_msg)
 
-        # Ensure required roles for the playbook are installed
-        required_roles = self._get_required_roles_for_playbook(playbook_path)
-        for role_name in required_roles:
-            is_wireguard = role_name == WIREGUARD_GALAXY_ROLE
-            if is_wireguard:
-                if self._is_role_installed(role_name):
-                    continue  # Use existing WireGuard role (no --force) so AllowedIPs fix in ~/.ansible stays
-                self.logger.info(f"Installing WireGuard role '{role_name}' from Ansible Galaxy...")
-            elif not self._is_role_installed(role_name):
-                self.logger.info(f"Installing required role '{role_name}' for playbook '{playbook_name}'")
-            else:
-                continue
-            if not self.install_ansible_galaxy_role(role_name, force=not is_wireguard):
-                error_msg = f"Failed to install required role '{role_name}' for playbook '{playbook_name}'"
-                self.logger.error(error_msg)
-                raise RuntimeError(error_msg)
-
-        if WIREGUARD_GALAXY_ROLE in required_roles:
-            self._patch_wireguard_allowed_ips()
-            self._patch_wireguard_server_config()
+        self.ensure_playbook_roles_installed(playbook_name, raise_on_failure=True)
 
         self.logger.info(f"Running ansible playbook: {playbook_name}")
 
@@ -1308,13 +1338,14 @@ class AnsibleManager:
         Requires wireguard-tools (wg-quick) and passwordless sudo (as on GitHub Actions).
         Uses the generated client config in-place; wg-quick accepts any config path.
         """
-        wireguard_config_path = self._ci_wireguard_config_path()
-        if not os.path.exists(wireguard_config_path):
-            self.logger.error(f"WireGuard config file not found: {wireguard_config_path}")
+        source_config_path = self._ci_wireguard_config_path()
+        if not os.path.exists(source_config_path):
+            self.logger.error(f"WireGuard config file not found: {source_config_path}")
             sys.exit(1)
 
+        wireguard_config_path = self._prepare_ci_wireguard_config()
         self._ci_wireguard_config_active = wireguard_config_path
-        self.logger.info(f"CI mode: bringing up WireGuard from {wireguard_config_path}")
+        self.logger.info(f"CI mode: bringing up WireGuard from {source_config_path}")
         result = subprocess.run(
             ["sudo", "wg-quick", "up", wireguard_config_path],
             capture_output=True,
@@ -1337,9 +1368,9 @@ class AnsibleManager:
 
     def disconnect_wireguard_ci(self) -> None:
         """Tear down the CI WireGuard interface if it is up."""
-        wireguard_config_path = getattr(
-            self, "_ci_wireguard_config_active", None
-        ) or self._ci_wireguard_config_path()
+        wireguard_config_path = getattr(self, "_ci_wireguard_config_active", None)
+        if not wireguard_config_path:
+            wireguard_config_path = self._ci_wireguard_config_path()
         if not os.path.exists(wireguard_config_path):
             return
         subprocess.run(
@@ -1347,6 +1378,12 @@ class AnsibleManager:
             capture_output=True,
             text=True,
         )
+        original = getattr(self, "_ci_wireguard_config_original", None)
+        if original is not None:
+            with open(self._ci_wireguard_config_path(), "w", encoding="utf-8") as f:
+                f.write(original)
+            self._ci_wireguard_config_original = None
+        self._ci_wireguard_config_active = None
 
     def prompt_vpn_connection(self) -> None:
         """

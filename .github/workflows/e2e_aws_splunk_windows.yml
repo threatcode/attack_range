@@ -24,10 +24,10 @@ jobs:
       - name: Install Terraform
         run: |
           TERRAFORM_VERSION=1.14.4
-          curl -s "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o terraform.zip
-          unzip terraform.zip
-          sudo mv terraform /usr/local/bin/
-          rm terraform.zip
+          curl -s "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip
+          unzip -o /tmp/terraform.zip -d /tmp
+          sudo mv /tmp/terraform /usr/local/bin/
+          rm /tmp/terraform.zip
           terraform version
 
       - uses: actions/setup-python@v6

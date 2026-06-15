@@ -39,6 +39,11 @@ url = "https://pypi.org/simple/"
 pytest = "^8.0"
 moto = {version = "^5.0", extras = ["s3"]}
 
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests that deploy real cloud infrastructure",
+]
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

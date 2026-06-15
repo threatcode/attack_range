@@ -175,10 +175,25 @@ export async function destroyAttackRange(attackRangeId: string): Promise<{ statu
 	return await response.json();
 }
 
+export interface AtomicTestTarget {
+	technique: string;
+	guid: string;
+}
+
+export interface AtomicFileTarget {
+	path?: string;
+	content?: string;
+	technique?: string;
+	guid?: string;
+	src_dir?: string;
+}
+
 export interface SimulateRequest {
 	attack_range_id: string;
 	target: string;
-	techniques: string[];
+	techniques?: string[];
+	atomics?: AtomicTestTarget[];
+	atomic_files?: AtomicFileTarget[];
 }
 
 export interface SimulateResponse {
@@ -187,12 +202,50 @@ export interface SimulateResponse {
 	attack_range_id: string;
 	target: string;
 	techniques: string[];
+	atomics: AtomicTestTarget[];
+	atomic_files?: AtomicFileTarget[];
 	execution_output?: {
 		[host: string]: Array<{
 			technique: string;
 			output: string[];
 		}>;
 	};
+}
+
+export interface SplunkExportRequest {
+	attack_range_id: string;
+	search: string;
+	earliest_time?: string;
+	latest_time?: string;
+	max_results?: number;
+}
+
+export interface SplunkExportResponse {
+	status: string;
+	message: string;
+	attack_range_id: string;
+	search: string;
+	earliest_time: string;
+	latest_time: string;
+	splunk_host: string;
+	event_count: number;
+	/** One Splunk _raw value per event */
+	events: string[];
+}
+
+export async function exportSplunkEvents(request: SplunkExportRequest): Promise<SplunkExportResponse> {
+	const response = await fetch(`${API_BASE_URL}/attack-range/splunk/export`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+		},
+		body: JSON.stringify(request),
+	});
+	if (!response.ok) {
+		const error = await response.json();
+		throw new Error(error.message || error.details || 'Failed to export Splunk events');
+	}
+	return await response.json();
 }
 
 export async function simulateAttackRange(request: SimulateRequest): Promise<SimulateResponse> {

@@ -332,7 +332,7 @@ if (id) {
 			{attackRange.status === 'running' && attackRange.result && attackRange.result.architecture && (
 				<div class="detail-section">
 					<h3>Atomic Red Team Simulation</h3>
-					<p class="simulation-description">Run Atomic Red Team techniques against servers in the attack range</p>
+					<p class="simulation-description">Run Atomic Red Team techniques or individual atomic tests (technique ID + GUID) against servers in the attack range</p>
 					<form id="simulate-form" class="simulation-form">
 						<div class="form-group">
 							<label for="target-server">Target Server:</label>
@@ -352,17 +352,92 @@ if (id) {
 								id="techniques"
 								name="techniques"
 								placeholder="T1003.001, T1059.003"
-								required
-								pattern="^T[0-9]+(\.[0-9]+)?(,\s*T[0-9]+(\.[0-9]+)?)*$"
+								pattern="^$|^T[0-9]+(\.[0-9]+)?(,\s*T[0-9]+(\.[0-9]+)?)*$"
 								title="Comma-separated MITRE ATT&CK technique IDs (e.g., T1003.001, T1059.003)"
 							/>
-							<small class="form-help">Enter comma-separated MITRE ATT&CK technique IDs (e.g., T1003.001, T1059.003)</small>
+							<small class="form-help">Optional. Runs all atomics for each technique ID.</small>
+						</div>
+						<div class="form-group">
+							<label for="atomics">Atomics (technique:GUID):</label>
+							<input
+								type="text"
+								id="atomics"
+								name="atomics"
+								placeholder="T1003.001:0be2230c-9ab3-4ac2-8826-3199b9a0ebf8"
+								title="Comma-separated TECHNIQUE:GUID pairs from ART YAML"
+							/>
+							<small class="form-help">Optional. One atomic per pair (technique ID and auto_generated_guid). Provide at least one technique ID or atomic pair.</small>
 						</div>
 						<button type="submit" class="btn-primary simulate-button" id="simulate-button">
 							Run Simulation
 						</button>
 					</form>
 					<div id="simulation-result" class="simulation-result" style="display: none;"></div>
+				</div>
+			)}
+
+			{attackRange.status === 'running' && attackRange.result && attackRange.result.architecture && attackRange.result.architecture.some((server) => {
+				const name = (server.name || '').toLowerCase();
+				const roles = server.roles || [];
+				return name === 'splunk' || roles.some((r) => typeof r === 'string' && r.includes('ludus_ar_splunk'));
+			}) && (
+				<div class="detail-section">
+					<h3>Splunk Event Export</h3>
+					<p class="simulation-description">
+						Export raw events from the attack range Splunk server via the management API. Requires VPN connectivity.
+					</p>
+					<form id="splunk-export-form" class="simulation-form">
+						<div class="form-group">
+							<label for="splunk-search">Search (SPL):</label>
+							<textarea
+								id="splunk-search"
+								name="search"
+								rows="3"
+								required
+								placeholder="index=* sourcetype=WinEventLog:Security"
+							></textarea>
+							<small class="form-help">SPL query with or without a leading <code>search</code> keyword.</small>
+						</div>
+						<div class="form-group">
+							<label for="splunk-earliest">Earliest time:</label>
+							<input
+								type="text"
+								id="splunk-earliest"
+								name="earliest_time"
+								value="-24h"
+								required
+								placeholder="-24h"
+							/>
+							<small class="form-help">Splunk time modifier (e.g. <code>-1h</code>, <code>-24h</code>, <code>-1d@d</code>).</small>
+						</div>
+						<div class="form-group">
+							<label for="splunk-latest">Latest time:</label>
+							<input
+								type="text"
+								id="splunk-latest"
+								name="latest_time"
+								value="now"
+								required
+								placeholder="now"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="splunk-max-results">Max results:</label>
+							<input
+								type="number"
+								id="splunk-max-results"
+								name="max_results"
+								value="1000"
+								min="1"
+								max="50000"
+								required
+							/>
+						</div>
+						<button type="submit" class="btn-primary simulate-button" id="splunk-export-button">
+							Export Events
+						</button>
+					</form>
+					<div id="splunk-export-result" class="simulation-result" style="display: none;"></div>
 				</div>
 			)}
 
@@ -679,16 +754,28 @@ if (id) {
 				
 				const formData = new FormData(simulateForm);
 				const target = formData.get('target') as string;
-				const techniquesInput = formData.get('techniques') as string;
+				const techniquesInput = (formData.get('techniques') as string) || '';
+				const atomicsInput = (formData.get('atomics') as string) || '';
 				
-				// Parse techniques (comma-separated, trim whitespace)
 				const techniques = techniquesInput
 					.split(',')
 					.map(t => t.trim())
 					.filter(t => t.length > 0);
+				const atomics: { technique: string; guid: string }[] = [];
+				for (const part of atomicsInput.split(',').map((p) => p.trim()).filter((p) => p.length > 0)) {
+					const colon = part.indexOf(':');
+					if (colon < 1) {
+						alert(`Invalid atomic entry: ${part}. Use TECHNIQUE:GUID (e.g. T1003.001:0be2230c-...)`);
+						return;
+					}
+					atomics.push({
+						technique: part.slice(0, colon).trim(),
+						guid: part.slice(colon + 1).trim(),
+					});
+				}
 				
-				if (techniques.length === 0) {
-					alert('Please enter at least one technique ID');
+				if (techniques.length === 0 && atomics.length === 0) {
+					alert('Please enter at least one technique ID or atomic (technique:GUID)');
 					return;
 				}
 				
@@ -710,6 +797,7 @@ if (id) {
 							attack_range_id: attackRangeId,
 							target: target,
 							techniques: techniques,
+							atomics: atomics,
 						}),
 					});
 					
@@ -725,7 +813,8 @@ if (id) {
 					let outputHtml = `
 						<h4>Simulation Completed Successfully</h4>
 						<p><strong>Target:</strong> ${result.target}</p>
-						<p><strong>Techniques:</strong> ${result.techniques.join(', ')}</p>
+						${result.techniques?.length ? `<p><strong>Techniques:</strong> ${result.techniques.join(', ')}</p>` : ''}
+						${result.atomics?.length ? `<p><strong>Atomics:</strong> ${result.atomics.map((a) => `${a.technique}:${a.guid}`).join(', ')}</p>` : ''}
 						<p>${result.message}</p>
 					`;
 					
@@ -766,6 +855,99 @@ if (id) {
 					simulateButton.textContent = 'Run Simulation';
 				}
 			});
+		}
+
+		const splunkExportForm = document.getElementById('splunk-export-form') as HTMLFormElement;
+		if (splunkExportForm) {
+			const splunkAttackRangeId = window.location.pathname.split('/').pop();
+			if (!splunkAttackRangeId) {
+				console.error('Error: Attack range ID not found');
+			} else {
+				splunkExportForm.addEventListener('submit', async (e) => {
+					e.preventDefault();
+					const formData = new FormData(splunkExportForm);
+					const search = (formData.get('search') as string)?.trim();
+					const earliest_time = (formData.get('earliest_time') as string)?.trim() || '-24h';
+					const latest_time = (formData.get('latest_time') as string)?.trim() || 'now';
+					const max_results = parseInt(formData.get('max_results') as string, 10) || 1000;
+
+					if (!search) {
+						alert('Please enter a Splunk search query');
+						return;
+					}
+
+					const exportButton = document.getElementById('splunk-export-button') as HTMLButtonElement;
+					const resultDiv = document.getElementById('splunk-export-result') as HTMLDivElement;
+
+					exportButton.disabled = true;
+					exportButton.textContent = 'Exporting...';
+					resultDiv.style.display = 'none';
+
+					try {
+						const response = await fetch(`${API_BASE_URL}/attack-range/splunk/export`, {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								attack_range_id: splunkAttackRangeId,
+								search,
+								earliest_time,
+								latest_time,
+								max_results,
+							}),
+						});
+
+						if (!response.ok) {
+							const error = await response.json();
+							throw new Error(error.details || error.message || 'Failed to export Splunk events');
+						}
+
+						const result = await response.json();
+						resultDiv.className = 'simulation-result simulation-success';
+						const rawLines: string[] = result.events ?? [];
+						const previewText = rawLines.slice(0, 5).join('\n');
+						const fullText = rawLines.join('\n');
+						const downloadId = `splunk-export-${Date.now()}`;
+
+						resultDiv.innerHTML = `
+							<h4>Export Completed</h4>
+							<p><strong>Splunk host:</strong> ${result.splunk_host}</p>
+							<p><strong>Search:</strong> <code>${result.search}</code></p>
+							<p><strong>Time range:</strong> ${result.earliest_time} → ${result.latest_time}</p>
+							<p><strong>Events:</strong> ${result.event_count}</p>
+							<p>${result.message}</p>
+							<button type="button" class="btn-primary simulate-button" id="${downloadId}">Download raw logs</button>
+							<div class="execution-output">
+								<h5>Preview (first 5 events)</h5>
+								<pre class="output-lines">${previewText.replace(/</g, '&lt;')}</pre>
+							</div>
+						`;
+						resultDiv.style.display = 'block';
+
+						const downloadBtn = document.getElementById(downloadId);
+						if (downloadBtn) {
+							downloadBtn.addEventListener('click', () => {
+								const blob = new Blob([fullText], { type: 'text/plain' });
+								const url = URL.createObjectURL(blob);
+								const a = document.createElement('a');
+								a.href = url;
+								a.download = `splunk-export-${splunkAttackRangeId}-${result.event_count}-events.txt`;
+								a.click();
+								URL.revokeObjectURL(url);
+							});
+						}
+					} catch (error) {
+						resultDiv.className = 'simulation-result simulation-error';
+						resultDiv.innerHTML = `
+							<h4>Export Failed</h4>
+							<p>${error instanceof Error ? error.message : 'Failed to export Splunk events'}</p>
+						`;
+						resultDiv.style.display = 'block';
+					} finally {
+						exportButton.disabled = false;
+						exportButton.textContent = 'Export Events';
+					}
+				});
+			}
 		}
 
 		// Smart polling: only refresh when attack range status changes
@@ -1539,6 +1721,19 @@ if (id) {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+	}
+
+	.simulation-form textarea {
+		width: 100%;
+		min-height: 4.5rem;
+		padding: 0.625rem 0.75rem;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-bg-dark);
+		color: var(--color-text-primary);
+		font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+		font-size: 0.875rem;
+		resize: vertical;
 	}
 
 	.simulate-button {

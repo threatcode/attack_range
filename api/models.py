@@ -1,7 +1,7 @@
 """Pydantic models for API request and response validation."""
 
 from typing import Optional, Dict, Any, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class HealthResponse(BaseModel):
@@ -183,20 +183,101 @@ class ProviderCheckResponse(BaseModel):
     providers: List[ProviderAvailability] = Field(..., description="List of provider availability status")
 
 
+class AtomicTestTarget(BaseModel):
+    """A single Atomic Red Team test identified by technique and auto_generated_guid."""
+    technique: str = Field(..., description="MITRE ATT&CK technique ID (e.g., T1003.001)")
+    guid: str = Field(..., description="Atomic test auto_generated_guid from the ART YAML")
+
+
+class AtomicSrcFileTarget(BaseModel):
+    """Inline companion file deployed under atomics/<technique>/src/ on the target."""
+    name: str = Field(..., description="Filename relative to the technique src/ directory")
+    content_base64: str = Field(..., description="Base64-encoded file contents")
+
+
+class AtomicFileTarget(BaseModel):
+    """Custom atomic YAML to deploy on the target host before execution."""
+    path: Optional[str] = Field(
+        None,
+        description="Absolute or playbook-relative path to atomic YAML on the Ansible controller",
+    )
+    content: Optional[str] = Field(
+        None,
+        description="Inline atomic YAML content (alternative to path)",
+    )
+    technique: Optional[str] = Field(
+        None,
+        description="MITRE technique ID override (defaults to attack_technique in YAML)",
+    )
+    guid: Optional[str] = Field(
+        None,
+        description="auto_generated_guid to run (defaults to sole test guid when file has one test)",
+    )
+    src_dir: Optional[str] = Field(
+        None,
+        description="Optional companion src/ directory path on the Ansible controller",
+    )
+    src_files: List["AtomicSrcFileTarget"] = Field(
+        default_factory=list,
+        description="Inline src/ files transferred with the atomic YAML",
+    )
+
+    @model_validator(mode="after")
+    def require_path_or_content(self):
+        if not self.path and not self.content:
+            raise ValueError("Each atomic file entry must include either path or content.")
+        return self
+
+
 class SimulateRequest(BaseModel):
     """Request model for running Atomic Red Team simulation."""
     attack_range_id: str = Field(..., description="Attack range ID")
     target: str = Field(..., description="Target server name (must match a server name in attack_range config)")
-    techniques: List[str] = Field(..., description="List of MITRE ATT&CK technique IDs (e.g., ['T1003.001', 'T1059.003'])")
+    techniques: List[str] = Field(
+        default_factory=list,
+        description="MITRE ATT&CK technique IDs; runs all atomics for each technique (e.g., ['T1003.001'])",
+    )
+    atomics: List[AtomicTestTarget] = Field(
+        default_factory=list,
+        description="Specific atomics to run; each entry requires technique id and atomic test guid",
+    )
+    atomic_files: List[AtomicFileTarget] = Field(
+        default_factory=list,
+        description="Custom atomic YAML files to deploy and execute on the target host",
+    )
+
+    @model_validator(mode="after")
+    def require_simulation_targets(self):
+        if not self.techniques and not self.atomics and not self.atomic_files:
+            raise ValueError(
+                "Provide at least one technique ID, atomic (technique + guid), or atomic file."
+            )
+        return self
 
     class Config:
         json_schema_extra = {
             "example": {
                 "attack_range_id": "550e8400-e29b-41d4-a716-446655440000",
                 "target": "windows_server",
-                "techniques": ["T1003.001", "T1059.003"]
+                "techniques": ["T1059.003"],
+                "atomics": [
+                    {
+                        "technique": "T1003.001",
+                        "guid": "0be2230c-9ab3-4ac2-8826-3199b9a0ebf8",
+                    }
+                ],
+                "atomic_files": [
+                    {"path": "/path/on/controller/custom.yaml"},
+                ],
             }
         }
+
+
+class AtomicExecutionSummary(BaseModel):
+    """Aggregate counts for atomic simulation runs."""
+    total: int = 0
+    succeeded: int = 0
+    failed: int = 0
 
 
 class SimulateResponse(BaseModel):
@@ -205,8 +286,68 @@ class SimulateResponse(BaseModel):
     message: str = Field(..., description="Status message")
     attack_range_id: str = Field(..., description="Attack range ID")
     target: str = Field(..., description="Target server name")
-    techniques: List[str] = Field(..., description="List of techniques that were executed")
-    execution_output: Optional[Dict[str, Any]] = Field(None, description="Execution output from Atomic Red Team tests")
+    techniques: List[str] = Field(default_factory=list, description="Technique IDs that were executed (all atomics per technique)")
+    atomics: List[AtomicTestTarget] = Field(
+        default_factory=list,
+        description="Specific atomics that were executed (technique + guid pairs)",
+    )
+    atomic_files: List[AtomicFileTarget] = Field(
+        default_factory=list,
+        description="Custom atomic YAML files that were deployed and executed",
+    )
+    execution_status: Optional[str] = Field(
+        None,
+        description="Overall atomic execution status (success/failed/unknown) from Ansible",
+    )
+    execution_summary: Optional[AtomicExecutionSummary] = Field(
+        None,
+        description="Per-atomic success/failure counts",
+    )
+    execution_output: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Structured atomic execution results (results, summary, by_host)",
+    )
+
+
+class SplunkExportRequest(BaseModel):
+    """Request model for exporting raw events from the attack range Splunk server."""
+    attack_range_id: str = Field(..., description="Attack range ID")
+    search: str = Field(..., description="SPL search (with or without leading 'search')")
+    earliest_time: str = Field(default="-24h", description="Splunk earliest_time bound (e.g. '-24h', '-1d@d')")
+    latest_time: str = Field(default="now", description="Splunk latest_time bound (e.g. 'now')")
+    max_results: int = Field(
+        default=10000,
+        ge=1,
+        le=50000,
+        description="Maximum number of events to export (Splunk export count)",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "attack_range_id": "550e8400-e29b-41d4-a716-446655440000",
+                "search": "index=* sourcetype=WinEventLog:Security",
+                "earliest_time": "-1h",
+                "latest_time": "now",
+                "max_results": 1000,
+            }
+        }
+
+
+class SplunkExportResponse(BaseModel):
+    """Response model for Splunk raw event export."""
+    status: str = Field(..., description="Export status")
+    message: str = Field(..., description="Status message")
+    attack_range_id: str = Field(..., description="Attack range ID")
+    search: str = Field(..., description="Normalized SPL search that was executed")
+    earliest_time: str = Field(..., description="Earliest time bound used")
+    latest_time: str = Field(..., description="Latest time bound used")
+    splunk_host: str = Field(..., description="Splunk management API host")
+    event_count: int = Field(..., description="Number of events returned")
+    events: List[str] = Field(
+        ...,
+        description="Splunk _raw field per event (one log line per event; join with newlines for line-delimited export)",
+    )
 
 
 class ShareRequest(BaseModel):

@@ -102,8 +102,13 @@ class TerraformManager:
                 self.logger.info("Cleaning up existing .terraform directory to avoid stale backend configs...")
                 shutil.rmtree(terraform_dir_path)
             
-            # Use -reconfigure for fresh setups, -migrate-state if backend already existed
-            init_flags = ["-reconfigure", "-input=false"] if backend_was_created else ["-migrate-state", "-input=false"]
+            # Use -reconfigure for fresh setups, -migrate-state if backend already existed.
+            # -upgrade allows provider version bumps when lock file is older than module constraints.
+            init_flags = (
+                ["-reconfigure", "-input=false", "-upgrade"]
+                if backend_was_created
+                else ["-migrate-state", "-input=false", "-upgrade"]
+            )
             init_result = subprocess.run(
                 ["terraform", "init"] + init_flags,
                 capture_output=True,
@@ -126,7 +131,7 @@ class TerraformManager:
         try:
             os.chdir(self.terraform_dir)
             init_result = subprocess.run(
-                ["terraform", "init", "-reconfigure"],
+                ["terraform", "init", "-reconfigure", "-input=false", "-upgrade"],
                 capture_output=True,
                 text=True
             )

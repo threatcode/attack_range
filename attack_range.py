@@ -187,10 +187,41 @@ def simulate_action(args):
             print(f"Error: Config file not found: {config_path}")
             sys.exit(1)
     
-    # Parse techniques (comma-separated)
-    techniques = [t.strip() for t in args.techniques.split(",") if t.strip()]
-    if not techniques:
-        print("Error: No techniques specified. Please provide at least one technique ID.")
+    techniques = []
+    if args.techniques:
+        techniques = [t.strip() for t in args.techniques.split(",") if t.strip()]
+
+    atomics = []
+    if args.atomics:
+        for part in args.atomics.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if ":" not in part:
+                print(
+                    f"Error: Invalid atomic entry {part!r}. "
+                    "Use TECHNIQUE:GUID (e.g., T1003.001:0be2230c-9ab3-4ac2-8826-3199b9a0ebf8)."
+                )
+                sys.exit(1)
+            technique, guid = part.split(":", 1)
+            atomics.append({"technique": technique.strip(), "guid": guid.strip()})
+
+    atomic_files = []
+    if args.atomic_files:
+        for file_path in args.atomic_files.split(","):
+            file_path = file_path.strip()
+            if not file_path:
+                continue
+            if not os.path.isfile(file_path):
+                print(f"Error: Atomic file not found: {file_path}")
+                sys.exit(1)
+            atomic_files.append({"path": os.path.abspath(file_path)})
+
+    if not techniques and not atomics and not atomic_files:
+        print(
+            "Error: Specify at least one technique ID (--techniques), "
+            "atomic (--atomics TECHNIQUE:GUID,...), or atomic file (--atomic-file PATH,...)."
+        )
         sys.exit(1)
     
     # Load config from the specified file
@@ -198,7 +229,7 @@ def simulate_action(args):
     # Get absolute path to config file
     config_path = os.path.abspath(config_path)
     controller = AttackRangeController(config, config_path=config_path)
-    controller.simulate(args.target, techniques)
+    controller.simulate(args.target, techniques, atomics, atomic_files)
 
 
 def share_action(args):
@@ -302,8 +333,24 @@ def main():
     simulate_parser.add_argument(
         "-te",
         "--techniques",
-        required=True,
-        help="Comma-separated list of MITRE ATT&CK technique IDs (e.g., T1003.001,T1059.003)",
+        help="Comma-separated MITRE ATT&CK technique IDs (e.g., T1003.001,T1059.003); runs all atomics per technique",
+    )
+    simulate_parser.add_argument(
+        "-a",
+        "--atomics",
+        help=(
+            "Comma-separated TECHNIQUE:GUID pairs (e.g., "
+            "T1003.001:0be2230c-9ab3-4ac2-8826-3199b9a0ebf8); runs one atomic per pair"
+        ),
+    )
+    simulate_parser.add_argument(
+        "-f",
+        "--atomic-file",
+        dest="atomic_files",
+        help=(
+            "Comma-separated paths to custom atomic YAML files on this machine "
+            "(deployed to the target host and executed)"
+        ),
     )
     simulate_parser.set_defaults(func=simulate_action)
 

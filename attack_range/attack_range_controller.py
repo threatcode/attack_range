@@ -391,16 +391,38 @@ class AttackRangeController:
         if self.config_path:
             self.config_manager.remove_config()
 
-    def simulate(self, target: str, techniques: list) -> dict:
+    def simulate(
+        self,
+        target: str,
+        techniques: list | None = None,
+        atomics: list | None = None,
+        atomic_files: list | None = None,
+    ) -> dict:
         """
         Run Atomic Red Team techniques against a target server.
         
         :param target: Target server name (must match a server name in attack_range config)
         :param techniques: List of MITRE ATT&CK technique IDs (e.g., ["T1003.001", "T1059.003"])
+        :param atomics: List of dicts with ``technique`` and ``guid`` for individual atomic tests
+        :param atomic_files: List of dicts with custom atomic YAML (``path`` or ``content`` on controller)
         :raises ValueError: If validation fails
         :raises RuntimeError: If simulation execution fails
         """
-        self.logger.info(f"[action] > simulate on target: {target} with techniques: {techniques}\n")
+        techniques = techniques or []
+        atomics = atomics or []
+        atomic_files = atomic_files or []
+        if not techniques and not atomics and not atomic_files:
+            error_msg = (
+                "No techniques, atomics, or atomic files specified. Provide at least one "
+                "technique ID, atomic (technique + guid), or atomic file."
+            )
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        self.logger.info(
+            f"[action] > simulate on target: {target} with techniques: {techniques}, "
+            f"atomics: {len(atomics)}, atomic_files: {len(atomic_files)}\n"
+        )
         
         # Validate that attack range is running
         status = self.config.get("general", {}).get("status", "")
@@ -446,11 +468,18 @@ class AttackRangeController:
         
         # Run the simulation playbook
         self.logger.info(f"Running Atomic Red Team simulation on {target}...")
-        self.logger.info(f"Techniques: {', '.join(techniques)}")
-        
+        if techniques:
+            self.logger.info(f"Techniques: {', '.join(techniques)}")
+        if atomics:
+            self.logger.info(f"Atomics: {len(atomics)} test(s) (technique + guid)")
+        if atomic_files:
+            self.logger.info(f"Atomic files: {len(atomic_files)} custom YAML file(s)")
+
         extra_vars = {
             "target_host": target,  # Use server name as inventory group
-            "techniques": techniques
+            "techniques": techniques,
+            "atomics": atomics,
+            "atomic_files": atomic_files,
         }
         
         # Ensure the p4t12ick.ar_atomic_red_team role is installed

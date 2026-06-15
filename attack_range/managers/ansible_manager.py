@@ -21,6 +21,180 @@ from typing import Optional, Dict, Any
 
 # Galaxy role that must always be updated to latest before VPN playbooks (vpn.yaml, vpn_config.yaml)
 WIREGUARD_GALAXY_ROLE = "p4t12ick.ar_wireguard_vpn"
+WG_CI_CLIENT_CONFIG = "client1.conf"
+WG_CI_ROUTER_IP = "10.0.1.10"
+
+_ART_SUMMARY_TASK_MARKERS = (
+    "Atomic Red Team execution summary",
+    "Simulate playbook execution status",
+)
+_ART_RUN_TASK_MARKERS = (
+    "Run specified Atomic Red Team Technique",
+    "Execute Atomic Red Team test",
+)
+
+
+def _normalize_art_execution_result(entry: dict) -> dict:
+    """Normalize one atomic execution record from Ansible facts or events."""
+    technique = entry.get("technique", "unknown")
+    if isinstance(technique, dict):
+        technique = technique.get("technique", "unknown")
+    guid = str(entry.get("guid") or "").strip()
+    success = bool(entry.get("success"))
+    return {
+        "technique": str(technique),
+        "guid": guid,
+        "success": success,
+        "failed": bool(entry.get("failed", not success)),
+        "return_code": int(entry.get("return_code", entry.get("rc", -1))),
+        "stdout_lines": list(entry.get("stdout_lines") or []),
+        "stderr_lines": list(entry.get("stderr_lines") or []),
+        "stdout": str(entry.get("stdout") or ""),
+        "stderr": str(entry.get("stderr") or ""),
+        "error": str(entry.get("error") or entry.get("msg") or ""),
+    }
+
+
+def _parse_debug_msg_payload(msg: Any) -> dict | None:
+    """Parse structured data from an Ansible debug task ``msg`` field."""
+    if isinstance(msg, dict):
+        if "results" in msg or "summary" in msg:
+            return msg
+        return None
+    if isinstance(msg, str) and msg.strip():
+        try:
+            parsed = json.loads(msg)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+    return None
+
+
+def _technique_from_task_vars(task_vars: dict) -> tuple[str, str]:
+    item = task_vars.get("item")
+    if isinstance(item, dict):
+        technique = str(item.get("technique") or "unknown")
+        guid = str(item.get("guid") or "").strip()
+        return technique, guid
+    technique = str(task_vars.get("technique") or item or "unknown")
+    guid = str(task_vars.get("atomic_test_guid") or task_vars.get("guid") or "").strip()
+    return technique, guid
+
+
+def _extract_atomic_simulation_output(
+    events_list: list,
+    extra_vars: dict | None = None,
+) -> dict:
+    """
+    Build structured atomic execution output from Ansible runner events.
+
+    Returns a dict with ``results``, ``summary``, and ``by_host`` keys.
+    """
+    by_host: dict[str, dict] = {}
+    extra_vars = extra_vars or {}
+
+    for event in events_list:
+        event_data = event.get("event_data", {})
+        event_type = event.get("event", "")
+        if event_type not in ("runner_on_ok", "runner_on_failed"):
+            continue
+
+        task_name = str(event_data.get("task") or "")
+        host = str(event_data.get("host") or "unknown")
+        res = event_data.get("res", {}) or {}
+
+        if any(marker in task_name for marker in _ART_SUMMARY_TASK_MARKERS):
+            payload = _parse_debug_msg_payload(res.get("msg"))
+            if not payload and "results" in res:
+                payload = res
+            if not payload:
+                continue
+            results = payload.get("results") or []
+            summary = payload.get("summary") or {}
+            status = payload.get("status")
+            if not status and summary:
+                failed = int(summary.get("failed", 0) or 0)
+                status = "failed" if failed else "success"
+            normalized = [_normalize_art_execution_result(r) for r in results if isinstance(r, dict)]
+            by_host[host] = {
+                "results": normalized,
+                "summary": summary,
+                "status": status or "unknown",
+            }
+            continue
+
+        if any(marker in task_name for marker in _ART_RUN_TASK_MARKERS):
+            task_vars = event_data.get("task_vars", {}) or {}
+            technique, guid = _technique_from_task_vars(task_vars)
+            stdout_lines = res.get("stdout_lines") or []
+            stderr_lines = res.get("stderr_lines") or []
+            if not stdout_lines and res.get("stdout"):
+                stdout_lines = str(res.get("stdout")).splitlines()
+            if not stderr_lines and res.get("stderr"):
+                stderr_lines = str(res.get("stderr")).splitlines()
+            failed = bool(res.get("failed"))
+            rc = int(res.get("rc", 1 if failed else 0))
+            entry = _normalize_art_execution_result(
+                {
+                    "technique": technique,
+                    "guid": guid,
+                    "success": not failed and rc == 0,
+                    "failed": failed,
+                    "return_code": rc,
+                    "stdout_lines": stdout_lines,
+                    "stderr_lines": stderr_lines,
+                    "stdout": res.get("stdout", ""),
+                    "stderr": res.get("stderr", ""),
+                    "error": res.get("msg", ""),
+                }
+            )
+            host_bucket = by_host.setdefault(
+                host,
+                {"results": [], "summary": {}, "status": "unknown"},
+            )
+            host_bucket["results"].append(entry)
+
+    # Recompute per-host summaries when built from individual run tasks.
+    for host, payload in by_host.items():
+        results = payload.get("results") or []
+        if results and not payload.get("summary"):
+            succeeded = sum(1 for r in results if r.get("success"))
+            failed = len(results) - succeeded
+            payload["summary"] = {
+                "total": len(results),
+                "succeeded": succeeded,
+                "failed": failed,
+            }
+            payload["status"] = "failed" if failed else "success"
+
+    all_results: list[dict] = []
+    for payload in by_host.values():
+        all_results.extend(payload.get("results") or [])
+
+    total = len(all_results)
+    succeeded = sum(1 for r in all_results if r.get("success"))
+    failed = total - succeeded
+    merged_summary = {
+        "total": total,
+        "succeeded": succeeded,
+        "failed": failed,
+    }
+    overall_status = "unknown"
+    if total:
+        overall_status = "failed" if failed else "success"
+    elif extra_vars.get("techniques") or extra_vars.get("atomics") or extra_vars.get("atomic_files"):
+        overall_status = "unknown"
+
+    if not all_results and not by_host:
+        return {}
+
+    return {
+        "status": overall_status,
+        "summary": merged_summary,
+        "results": all_results,
+        "by_host": by_host,
+    }
 
 
 class AnsibleManager:
@@ -734,216 +908,50 @@ class AnsibleManager:
             except OSError:
                 pass
 
-        # Extract execution output from tasks (check both ok and failed events since ignore_errors: True is used)
-        execution_output = {}
-        output_art_found = False
-        events_list = []
-        
-        if hasattr(runner, 'events') and runner.events:
-            # runner.events is a generator, convert to list for processing (only once)
+        execution_output: dict = {}
+        events_list: list = []
+
+        if hasattr(runner, "events") and runner.events:
             try:
                 events_list = list(runner.events)
                 self.logger.debug(f"Processing {len(events_list)} Ansible events")
             except (TypeError, AttributeError):
-                # If it's already a list or not iterable, use it directly
                 events_list = runner.events if isinstance(runner.events, list) else []
-                self.logger.debug(f"Processing events (count unknown - generator or list)")
-            
-            for event in events_list:
-                event_data = event.get('event_data', {})
-                event_type = event.get('event', '')
-                
-                # Look for task results that contain output_art (Atomic Red Team output)
-                # Check both runner_on_ok and runner_on_failed since the task uses ignore_errors: True
-                if event_type in ['runner_on_ok', 'runner_on_failed']:
-                    res = event_data.get('res', {})
-                    
-                    # Debug: log if we see output_art anywhere
-                    if 'output_art' in res:
-                        output_art_found = True
-                        self.logger.info(f"Found output_art in {event_type} event for task: {event_data.get('task', 'unknown')}")
-                    
-                    if 'output_art' in res:
-                        host = event_data.get('host', 'unknown')
-                        output_art = res.get('output_art', {})
-                        stdout_lines = output_art.get('stdout_lines', [])
-                        stderr_lines = output_art.get('stderr_lines', [])
-                        stdout = output_art.get('stdout', '')
-                        
-                        # Try to get output from any of these sources
-                        output_lines = stdout_lines
-                        if not output_lines and stderr_lines:
-                            output_lines = stderr_lines
-                        if not output_lines and stdout:
-                            output_lines = stdout.split('\n') if isinstance(stdout, str) else []
-                        
-                        if output_lines:
-                            if host not in execution_output:
-                                execution_output[host] = []
-                            # Try to get technique from various sources
-                            technique = 'unknown'
-                            
-                            # Method 1: Check event_data for item (from with_items loop)
-                            if 'item' in event_data:
-                                technique = event_data['item']
-                            # Method 2: Check task_vars which contains the item from with_items
-                            elif 'task_vars' in event_data:
-                                task_vars = event_data.get('task_vars', {})
-                                if 'item' in task_vars:
-                                    technique = task_vars['item']
-                                elif 'technique' in task_vars:
-                                    technique = task_vars['technique']
-                            # Method 3: Check if we can get it from the task name or args
-                            elif 'task' in event_data:
-                                task_name = event_data.get('task', '')
-                                # The task might have the technique in its name or args
-                                task_args = event_data.get('task_args', {})
-                                if '_raw_params' in task_args:
-                                    technique = task_args['_raw_params']
-                            
-                            self.logger.info(f"Found execution output for technique {technique} on host {host} ({len(output_lines)} lines)")
-                            execution_output[host].append({
-                                'technique': technique,
-                                'output': output_lines
-                            })
-        
-        # If we didn't find output_art in events, try reading from artifact files
-        if not execution_output and hasattr(runner, 'config'):
+
+        if events_list:
+            execution_output = _extract_atomic_simulation_output(events_list, extra_vars)
+
+        if not execution_output and hasattr(runner, "config"):
             try:
-                artifact_dir = os.path.join(self.ansible_dir, 'artifacts', str(runner.config.ident))
-                if os.path.exists(artifact_dir):
-                    self.logger.info(f"Attempting to read output from artifact directory: {artifact_dir}")
-                    # Method 1: Try reading from job_events directory
-                    job_events_dir = os.path.join(artifact_dir, 'job_events')
-                    if os.path.exists(job_events_dir) and os.path.isdir(job_events_dir):
-                        self.logger.info("Reading from job_events directory")
-                        # Read all event files in the directory
-                        for event_file in sorted(os.listdir(job_events_dir)):
-                            event_path = os.path.join(job_events_dir, event_file)
-                            try:
-                                with open(event_path, 'r') as f:
-                                    event = json.load(f)
-                                    event_data = event.get('event_data', {})
-                                    event_type = event.get('event', '')
-                                    
-                                    if event_type in ['runner_on_ok', 'runner_on_failed']:
-                                        res = event_data.get('res', {})
-                                        if 'output_art' in res:
-                                            host = event_data.get('host', 'unknown')
-                                            output_art = res.get('output_art', {})
-                                            stdout_lines = output_art.get('stdout_lines', [])
-                                            stdout = output_art.get('stdout', '')
-                                            
-                                            output_lines = stdout_lines
-                                            if not output_lines and stdout:
-                                                output_lines = stdout.split('\n') if isinstance(stdout, str) else []
-                                            
-                                            if output_lines:
-                                                if host not in execution_output:
-                                                    execution_output[host] = []
-                                                
-                                                # Get technique from task_vars
-                                                technique = 'unknown'
-                                                task_vars = event_data.get('task_vars', {})
-                                                if 'item' in task_vars:
-                                                    technique = task_vars['item']
-                                                elif 'technique' in task_vars:
-                                                    technique = task_vars['technique']
-                                                
-                                                self.logger.info(f"Found execution output from job_events for technique {technique} on host {host}")
-                                                execution_output[host].append({
-                                                    'technique': technique,
-                                                    'output': output_lines
-                                                })
-                            except (json.JSONDecodeError, IOError) as e:
-                                self.logger.debug(f"Could not parse event file {event_file}: {e}")
-                                continue
-                    
-                    # Method 2: Try parsing stdout file for output_art debug output
-                    if not execution_output:
-                        stdout_path = os.path.join(artifact_dir, 'stdout')
-                        if os.path.exists(stdout_path):
-                            self.logger.info("Attempting to extract output from stdout file")
-                            try:
-                                with open(stdout_path, 'r') as f:
-                                    stdout_content = f.read()
-                                    # Look for the output_art.stdout_lines pattern in the stdout
-                                    # This is a fallback if events don't contain the structured data
-                                    # The stdout might have the debug output showing the output_art
-                                    if 'output_art.stdout_lines' in stdout_content or 'ok: [' in stdout_content:
-                                        # Try to extract the output from the stdout text
-                                        # This is a simple approach - look for the pattern
-                                        import re
-                                        # Look for patterns like: ok: [10.0.2.11] => { "output_art.stdout_lines": [...] }
-                                        pattern = r'ok:\s*\[([^\]]+)\]\s*=>\s*\{[^}]*"output_art\.stdout_lines":\s*\[([^\]]+)\]'
-                                        matches = re.findall(pattern, stdout_content, re.DOTALL)
-                                        if matches:
-                                            self.logger.info(f"Found {len(matches)} output patterns in stdout")
-                                            for host, output_str in matches:
-                                                # Parse the output array
-                                                try:
-                                                    # Clean up the output string and parse as JSON array
-                                                    output_str = output_str.strip()
-                                                    # Remove quotes and split by comma if it's a simple list
-                                                    output_lines = [line.strip().strip('"').strip("'") for line in output_str.split(',')]
-                                                    output_lines = [line for line in output_lines if line]
-                                                    
-                                                    if output_lines:
-                                                        if host not in execution_output:
-                                                            execution_output[host] = []
-                                                        # We don't have technique from stdout, use first technique from extra_vars
-                                                        technique = extra_vars.get('techniques', ['unknown'])[0] if extra_vars and 'techniques' in extra_vars else 'unknown'
-                                                        execution_output[host].append({
-                                                            'technique': technique,
-                                                            'output': output_lines
-                                                        })
-                                                        self.logger.info(f"Extracted output from stdout for host {host}")
-                                                except Exception as e:
-                                                    self.logger.debug(f"Could not parse output from stdout: {e}")
-                            except Exception as e:
-                                self.logger.debug(f"Could not read stdout file: {e}")
+                artifact_dir = os.path.join(self.ansible_dir, "artifacts", str(runner.config.ident))
+                job_events_dir = os.path.join(artifact_dir, "job_events")
+                if os.path.isdir(job_events_dir):
+                    artifact_events = []
+                    for event_file in sorted(os.listdir(job_events_dir)):
+                        event_path = os.path.join(job_events_dir, event_file)
+                        try:
+                            with open(event_path, "r") as f:
+                                artifact_events.append(json.load(f))
+                        except (json.JSONDecodeError, OSError):
+                            continue
+                    execution_output = _extract_atomic_simulation_output(artifact_events, extra_vars)
             except Exception as e:
-                self.logger.debug(f"Could not read from artifact files: {e}")
-        
+                self.logger.debug(f"Could not read simulation output from artifact files: {e}")
+
         if execution_output:
-            self.logger.info(f"Extracted execution output for {len(execution_output)} host(s)")
+            summary = execution_output.get("summary", {})
+            self.logger.info(
+                "Extracted atomic execution output: "
+                f"status={execution_output.get('status')} "
+                f"total={summary.get('total')} "
+                f"succeeded={summary.get('succeeded')} "
+                f"failed={summary.get('failed')}"
+            )
         else:
-            if output_art_found:
-                self.logger.warning("Found output_art in events but couldn't extract output lines")
-            else:
-                self.logger.warning("No execution output found in Ansible events - output_art not found in any event")
-                # Debug: log some sample events to understand structure
-                if events_list:
-                    # Find all events with output_art or related to the atomic red team task
-                    art_related_events = []
-                    for e in events_list:
-                        event_data = e.get('event_data', {})
-                        task_name = event_data.get('task', '')
-                        res = event_data.get('res', {})
-                        if 'output_art' in res or 'Run specified Atomic Red Team Technique' in task_name or 'Run Atomic Red Team' in task_name:
-                            art_related_events.append({
-                                'event': e.get('event'),
-                                'task': task_name,
-                                'res_keys': list(res.keys()) if res else [],
-                                'has_output_art': 'output_art' in res
-                            })
-                    
-                    if art_related_events:
-                        self.logger.info(f"Found {len(art_related_events)} events related to Atomic Red Team:")
-                        for art_event in art_related_events[:5]:  # Show first 5
-                            self.logger.info(f"  - Event: {art_event['event']}, Task: {art_event['task']}, Res keys: {art_event['res_keys']}, Has output_art: {art_event['has_output_art']}")
-                    else:
-                        # Show sample of all ok/failed events
-                        sample_events = [e for e in events_list if e.get('event') in ['runner_on_ok', 'runner_on_failed']][:5]
-                        for sample in sample_events:
-                            event_data = sample.get('event_data', {})
-                            task_name = event_data.get('task', 'unknown')
-                            res_keys = list(event_data.get('res', {}).keys())
-                            self.logger.debug(f"Sample event - Task: {task_name}, Res keys: {res_keys}")
+            self.logger.warning("No structured atomic execution output found in Ansible events")
 
         if runner.status == "successful":
             self.logger.info(f"Playbook {playbook_name} completed successfully")
-            # Return execution output if available
             return execution_output if execution_output else None
         else:
             self.logger.error(f"Playbook {playbook_name} failed with status: {runner.status}")
@@ -1290,11 +1298,67 @@ class AnsibleManager:
 
         self.logger.info(f"All {len(roles_to_install)} ansible galaxy roles installed successfully")
 
+    def _ci_wireguard_config_path(self) -> str:
+        return os.path.join(self.ansible_dir, "client_configs", WG_CI_CLIENT_CONFIG)
+
+    def connect_wireguard_ci(self) -> None:
+        """
+        Connect to the attack range VPN non-interactively (CI / GitHub Actions).
+
+        Requires wireguard-tools (wg-quick) and passwordless sudo (as on GitHub Actions).
+        Uses the generated client config in-place; wg-quick accepts any config path.
+        """
+        wireguard_config_path = self._ci_wireguard_config_path()
+        if not os.path.exists(wireguard_config_path):
+            self.logger.error(f"WireGuard config file not found: {wireguard_config_path}")
+            sys.exit(1)
+
+        self._ci_wireguard_config_active = wireguard_config_path
+        self.logger.info(f"CI mode: bringing up WireGuard from {wireguard_config_path}")
+        result = subprocess.run(
+            ["sudo", "wg-quick", "up", wireguard_config_path],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            detail = result.stderr or result.stdout or "unknown error"
+            self.logger.error(f"wg-quick up failed: {detail}")
+            self.logger.error(
+                "CI WireGuard requires passwordless sudo (GitHub Actions) or run without "
+                "ATTACK_RANGE_CI=1 and connect manually when prompted."
+            )
+            sys.exit(1)
+
+        if not self.wait_for_ssh(WG_CI_ROUTER_IP, timeout=120):
+            self.logger.error(f"VPN connected but router {WG_CI_ROUTER_IP} is not reachable")
+            sys.exit(1)
+
+        self.logger.info("CI mode: VPN connection established")
+
+    def disconnect_wireguard_ci(self) -> None:
+        """Tear down the CI WireGuard interface if it is up."""
+        wireguard_config_path = getattr(
+            self, "_ci_wireguard_config_active", None
+        ) or self._ci_wireguard_config_path()
+        if not os.path.exists(wireguard_config_path):
+            return
+        subprocess.run(
+            ["sudo", "wg-quick", "down", wireguard_config_path],
+            capture_output=True,
+            text=True,
+        )
+
     def prompt_vpn_connection(self) -> None:
         """
         Display the WireGuard configuration and prompt user to connect to VPN.
         Waits for user confirmation before continuing.
+
+        When ATTACK_RANGE_CI=1, connects WireGuard automatically instead of prompting.
         """
+        if os.environ.get("ATTACK_RANGE_CI") == "1":
+            self.connect_wireguard_ci()
+            return
+
         # Path to the wireguard config file
         wireguard_config_path = os.path.join(self.ansible_dir, "client_configs", "client1.conf")
 

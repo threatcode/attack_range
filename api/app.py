@@ -21,6 +21,7 @@ from pydantic import ValidationError
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from attack_range.attack_range_controller import AttackRangeController
+from attack_range.splunk_export import SplunkExportError, export_raw_events
 from attack_range.utils import prepare_config_from_template, resolve_template_path, load_yaml_file, save_yaml_file
 from api.cloud_fields import get_cloud_fields_schema, get_gcp_zones_for_region
 from api.models import (
@@ -47,6 +48,8 @@ from api.models import (
     ProviderCheckResponse,
     SimulateRequest,
     SimulateResponse,
+    SplunkExportRequest,
+    SplunkExportResponse,
     ShareRequest,
     ShareResponse,
     UpdateNameRequest,
@@ -1393,7 +1396,7 @@ def list_attack_ranges():
     tags=[attack_range_tag],
     responses={200: SimulateResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse},
     summary="Run Atomic Red Team simulation",
-    description="Run Atomic Red Team techniques against a target server in a running attack range. This is a synchronous operation."
+    description="Run Atomic Red Team techniques and/or individual atomic tests (technique id + auto_generated_guid) against a target server in a running attack range. This is a synchronous operation."
 )
 def simulate_attack_range(body: SimulateRequest):
     """Run Atomic Red Team simulation on a target server."""
@@ -1437,16 +1440,21 @@ def simulate_attack_range(body: SimulateRequest):
                 details=f"Available servers: {', '.join(available_servers) if available_servers else 'None'}"
             ).model_dump()), 400
         
-        # Validate techniques
-        if not body.techniques:
-            return jsonify(ErrorResponse(
-                message="No techniques specified. Please provide at least one technique ID."
-            ).model_dump()), 400
-        
         # Create controller and run simulation
         controller = AttackRangeController(config, config_path=config_path)
         try:
-            execution_output = controller.simulate(body.target, body.techniques)
+            atomics_payload = [
+                {"technique": a.technique, "guid": a.guid} for a in body.atomics
+            ]
+            atomic_files_payload = [
+                a.model_dump(exclude_none=True) for a in body.atomic_files
+            ]
+            execution_output = controller.simulate(
+                body.target,
+                body.techniques,
+                atomics_payload,
+                atomic_files_payload,
+            )
         except ValueError as e:
             # Validation errors (status, target not found, etc.)
             error_msg = str(e)
@@ -1474,12 +1482,33 @@ def simulate_attack_range(body: SimulateRequest):
                 details=error_msg
             ).model_dump()), 500
         
+        parts = []
+        if body.techniques:
+            parts.append(f"{len(body.techniques)} technique(s)")
+        if body.atomics:
+            parts.append(f"{len(body.atomics)} atomic test(s)")
+        if body.atomic_files:
+            parts.append(f"{len(body.atomic_files)} atomic file(s)")
+        summary = " and ".join(parts) if parts else "simulation"
+
+        execution_status = None
+        execution_summary = None
+        if isinstance(execution_output, dict):
+            execution_status = execution_output.get("status")
+            summary_payload = execution_output.get("summary")
+            if isinstance(summary_payload, dict):
+                execution_summary = summary_payload
+
         return jsonify(SimulateResponse(
             status="success",
-            message=f"Successfully executed {len(body.techniques)} technique(s) on {body.target}",
+            message=f"Successfully executed {summary} on {body.target}",
             attack_range_id=body.attack_range_id,
             target=body.target,
             techniques=body.techniques,
+            atomics=body.atomics,
+            atomic_files=body.atomic_files,
+            execution_status=execution_status,
+            execution_summary=execution_summary,
             execution_output=execution_output
         ).model_dump()), 200
         
@@ -1495,6 +1524,80 @@ def simulate_attack_range(body: SimulateRequest):
         return jsonify(ErrorResponse(
             message="Failed to run simulation",
             details=f"{str(e)}\n\n{error_traceback}"
+        ).model_dump()), 500
+
+
+@app.post(
+    "/attack-range/splunk/export",
+    tags=[attack_range_tag],
+    responses={200: SplunkExportResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse},
+    summary="Export raw events from Splunk",
+    description=(
+        "Run a Splunk search against the attack range Splunk server and return the _raw field of each event. "
+        "Requires VPN connectivity to the range (Splunk management API on 10.0.2.x:8089). "
+        "This is a synchronous operation."
+    ),
+)
+def splunk_export_attack_range(body: SplunkExportRequest):
+    """Export raw events from the Splunk server in a running attack range."""
+    try:
+        config_path = os.path.join(CONFIG_DIR, f"{body.attack_range_id}.yml")
+        if not os.path.exists(config_path):
+            return jsonify(ErrorResponse(
+                message=f"Attack range with ID '{body.attack_range_id}' not found",
+                details=f"Config file not found: {config_path}",
+            ).model_dump()), 404
+
+        config = load_yaml_file(config_path)
+        if not config:
+            return jsonify(ErrorResponse(
+                message=f"Failed to load config for attack range '{body.attack_range_id}'",
+            ).model_dump()), 500
+
+        status = config.get("general", {}).get("status", "")
+        if status not in ["running", "completed"]:
+            return jsonify(ErrorResponse(
+                message=f"Cannot export from Splunk. Attack range status is '{status}'. Must be 'running' or 'completed'.",
+            ).model_dump()), 400
+
+        try:
+            events, metadata = export_raw_events(
+                config,
+                search=body.search,
+                earliest_time=body.earliest_time,
+                latest_time=body.latest_time,
+                max_results=body.max_results,
+            )
+        except ValueError as e:
+            return jsonify(ErrorResponse(
+                message="Splunk export validation failed",
+                details=str(e),
+            ).model_dump()), 400
+        except SplunkExportError as e:
+            print(f"[API] Splunk export failed: {e}", file=sys.stderr)
+            return jsonify(ErrorResponse(
+                message="Splunk export failed",
+                details=str(e),
+            ).model_dump()), 500
+
+        query = metadata["search"]
+        return jsonify(SplunkExportResponse(
+            status="success",
+            message=f"Exported {metadata['event_count']} event(s) from Splunk",
+            attack_range_id=body.attack_range_id,
+            search=query,
+            earliest_time=metadata["earliest_time"],
+            latest_time=metadata["latest_time"],
+            splunk_host=metadata["splunk_host"],
+            event_count=metadata["event_count"],
+            events=events,
+        ).model_dump()), 200
+
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        return jsonify(ErrorResponse(
+            message="Failed to export Splunk events",
+            details=f"{str(e)}\n\n{error_traceback}",
         ).model_dump()), 500
 
 

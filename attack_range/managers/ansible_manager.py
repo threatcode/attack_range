@@ -1096,42 +1096,67 @@ class AnsibleManager:
         
         return list(set(required_roles))  # Return unique roles
 
+    def _roles_install_path(self) -> str:
+        """Directory where ansible-galaxy installs roles for this attack range."""
+        return os.path.join(self.ansible_dir, "roles")
+
+    def _get_local_role_overrides(self) -> dict[str, str]:
+        """
+        Parse ATTACK_RANGE_LOCAL_ROLES env var (JSON map of galaxy role name -> local path).
+
+        :return: Dict of role name to expanded local filesystem path
+        """
+        raw = os.environ.get("ATTACK_RANGE_LOCAL_ROLES", "").strip()
+        if not raw:
+            return {}
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            self.logger.warning(
+                "ATTACK_RANGE_LOCAL_ROLES is not valid JSON; ignoring local role overrides"
+            )
+            return {}
+        if not isinstance(parsed, dict):
+            self.logger.warning(
+                "ATTACK_RANGE_LOCAL_ROLES must be a JSON object; ignoring local role overrides"
+            )
+            return {}
+        overrides: dict[str, str] = {}
+        for key, value in parsed.items():
+            if isinstance(key, str) and isinstance(value, str) and key and value:
+                overrides[key] = os.path.expanduser(value)
+        return overrides
+
+    def _resolve_role_dir(self, role_name: str) -> Optional[str]:
+        """
+        Return the installed role directory for a Galaxy role name, if present.
+
+        Checks terraform/ansible/roles and ~/.ansible/roles using dot and underscore
+        directory name variants.
+        """
+        role_dir_underscore = role_name.replace(".", "_")
+        role_dir_dot = role_name
+        search_bases = [
+            self._roles_install_path(),
+            os.path.expanduser("~/.ansible/roles"),
+        ]
+        for base in search_bases:
+            if not os.path.isdir(base):
+                continue
+            for variant in (role_dir_dot, role_dir_underscore):
+                candidate = os.path.join(base, variant)
+                if os.path.isdir(candidate):
+                    return candidate
+        return None
+
     def _is_role_installed(self, role_name: str) -> bool:
         """
         Check if an Ansible Galaxy role is installed.
-        
+
         :param role_name: Name of the role (e.g., 'p4t12ick.ar_wireguard_vpn')
         :return: True if role is installed, False otherwise
         """
-        # Ansible Galaxy installs roles in roles/ directory with format: namespace.rolename
-        # The directory name is the role name with dots replaced or kept depending on version
-        roles_dir = os.path.join(self.ansible_dir, "roles")
-        
-        # Check if roles directory exists
-        if not os.path.exists(roles_dir):
-            return False
-        
-        # Try different possible directory names
-        # Format 1: namespace_rolename (dots replaced with underscores)
-        role_dir_underscore = role_name.replace('.', '_')
-        # Format 2: namespace.rolename (dots kept)
-        role_dir_dot = role_name
-        
-        # Check both formats
-        if os.path.exists(os.path.join(roles_dir, role_dir_underscore)):
-            return True
-        if os.path.exists(os.path.join(roles_dir, role_dir_dot)):
-            return True
-        
-        # Also check in ~/.ansible/roles (default location)
-        home_roles_dir = os.path.expanduser("~/.ansible/roles")
-        if os.path.exists(home_roles_dir):
-            if os.path.exists(os.path.join(home_roles_dir, role_dir_underscore)):
-                return True
-            if os.path.exists(os.path.join(home_roles_dir, role_dir_dot)):
-                return True
-        
-        return False
+        return self._resolve_role_dir(role_name) is not None
 
     def _patch_wireguard_allowed_ips(self) -> None:
         """
@@ -1139,7 +1164,10 @@ class AnsibleManager:
         can reach 10.0.2.* (e.g. Splunk). Fixes 10.0.1.1/24, 10.0.2.1/24 -> 10.0.1.0/24, 10.0.2.0/24.
         Idempotent: no-op if already correct.
         """
-        path = os.path.expanduser("~/.ansible/roles/p4t12ick.ar_wireguard_vpn/templates/client.j2")
+        role_dir = self._resolve_role_dir(WIREGUARD_GALAXY_ROLE)
+        if not role_dir:
+            return
+        path = os.path.join(role_dir, "templates", "client.j2")
         if not os.path.exists(path):
             return
         try:
@@ -1160,7 +1188,10 @@ class AnsibleManager:
         client1 and shared clients can reach 10.0.2.*. PreDown for FORWARD uses
         || true so down does not abort if the rule is missing. Idempotent.
         """
-        path = os.path.expanduser("~/.ansible/roles/p4t12ick.ar_wireguard_vpn/templates/wg0.j2")
+        role_dir = self._resolve_role_dir(WIREGUARD_GALAXY_ROLE)
+        if not role_dir:
+            return
+        path = os.path.join(role_dir, "templates", "wg0.j2")
         if not os.path.exists(path):
             return
         # Target: SaveConfig=false, NAT, FORWARD. FORWARD PreDown uses || true to avoid abort when rule missing.
@@ -1223,29 +1254,49 @@ class AnsibleManager:
         """
         Install a specific Ansible Galaxy role with retry logic for transient SSL/network errors.
 
+        When ATTACK_RANGE_LOCAL_ROLES maps role_name to a local path, installs from that
+        path instead of Ansible Galaxy.
+
         :param role_name: Name of the role to install (e.g., 'p4t12ick.ar_wireguard_vpn')
         :param force: If True, pass --force to overwrite existing; if False, skip when already installed.
         :param max_retries: Maximum number of retry attempts for transient errors (default: 3)
         :return: True if installation succeeded, False otherwise
         """
+        local_overrides = self._get_local_role_overrides()
+        local_path = local_overrides.get(role_name)
+        if local_path is not None:
+            if not os.path.isdir(local_path):
+                self.logger.error(
+                    f"Local role path for '{role_name}' does not exist or is not a directory: {local_path}"
+                )
+                return False
+            install_target = f"{local_path},{role_name}"
+            self.logger.info(
+                f"Installing role '{role_name}' from local path '{local_path}' (ATTACK_RANGE_LOCAL_ROLES)"
+            )
+            max_retries = 1
+        else:
+            install_target = role_name
+
         cwd = os.getcwd()
+        roles_path = self._roles_install_path()
         try:
             os.chdir(self.ansible_dir)
-            
-            cmd = ["ansible-galaxy", "install", role_name]
+
+            cmd = ["ansible-galaxy", "install", install_target, "-p", roles_path]
             if force:
                 cmd.append("--force")
-            
-            # Retry logic for transient SSL/network errors
+
+            # Retry logic for transient SSL/network errors (Galaxy downloads only)
             for attempt in range(max_retries):
                 if attempt > 0:
                     # Exponential backoff: 2^attempt seconds (2, 4, 8 seconds)
                     wait_time = 2 ** attempt
                     self.logger.warning(f"Retrying installation of role '{role_name}' (attempt {attempt + 1}/{max_retries}) after {wait_time} seconds...")
                     time.sleep(wait_time)
-                else:
+                elif local_path is None:
                     self.logger.info(f"Installing role: {role_name}")
-                
+
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
@@ -1258,14 +1309,14 @@ class AnsibleManager:
                     if result.stdout:
                         self.logger.debug(result.stdout)
                     return True
-                
+
                 # Check if this is a transient SSL/network error that might benefit from retry
                 error_output = result.stderr.lower() if result.stderr else ""
                 is_transient_error = any(keyword in error_output for keyword in [
-                    "ssl", "unexpected_eof", "eof occurred", "connection", 
+                    "ssl", "unexpected_eof", "eof occurred", "connection",
                     "timeout", "temporary failure", "network", "urlopen error"
                 ])
-                
+
                 if is_transient_error and attempt < max_retries - 1:
                     # Log warning but continue to retry
                     self.logger.warning(f"Transient error installing role '{role_name}' (attempt {attempt + 1}/{max_retries}): {result.stderr[:200]}")
@@ -1276,7 +1327,7 @@ class AnsibleManager:
                     if result.stdout:
                         self.logger.error(f"stdout: {result.stdout}")
                     return False
-            
+
             # Should not reach here, but just in case
             return False
         finally:

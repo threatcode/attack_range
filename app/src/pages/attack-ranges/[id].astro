@@ -58,8 +58,13 @@ if (id) {
 				<div class="basic-info-header">
 					<h3>Basic Information</h3>
 					{['queued', 'build_vpn', 'build_lab'].includes(attackRange.status) ? (
-						<button class="btn-warning abort-button" data-id={attackRange.attack_range_id}>
-							Abort
+						<button
+							class="btn-warning abort-button"
+							data-id={attackRange.attack_range_id}
+							disabled={attackRange.terraform_running}
+							title={attackRange.terraform_running ? 'Abort is not allowed while Terraform is provisioning infrastructure' : undefined}
+						>
+							{attackRange.terraform_running ? 'Provisioning...' : 'Abort'}
 						</button>
 					) : (
 						<button
@@ -626,12 +631,14 @@ if (id) {
 			abortButton.addEventListener('click', async () => {
 				const attackRangeId = (abortButton as HTMLElement).dataset.id;
 				if (!attackRangeId) return;
+
+				const btn = abortButton as HTMLButtonElement;
+				if (btn.disabled) return;
 				
 				if (!confirm(`Are you sure you want to abort the build for attack range ${attackRangeId}?`)) {
 					return;
 				}
 
-				const btn = abortButton as HTMLButtonElement;
 				btn.disabled = true;
 				btn.textContent = 'Aborting...';
 
@@ -954,6 +961,7 @@ if (id) {
 		const attackRangeId = window.location.pathname.split('/').pop();
 		if (attackRangeId) {
 			let lastStatus: string | null = null;
+			let lastTerraformRunning: boolean | null = null;
 			let pollingInterval: number | null = null;
 			
 			// Get initial status from the page
@@ -961,6 +969,20 @@ if (id) {
 			if (statusElement) {
 				lastStatus = statusElement.textContent?.trim() || null;
 			}
+			const initialAbortButton = document.querySelector('.abort-button') as HTMLButtonElement | null;
+			if (initialAbortButton) {
+				lastTerraformRunning = initialAbortButton.disabled;
+			}
+
+			const updateAbortButton = (terraformRunning: boolean) => {
+				const btn = document.querySelector('.abort-button') as HTMLButtonElement | null;
+				if (!btn) return;
+				btn.disabled = terraformRunning;
+				btn.textContent = terraformRunning ? 'Provisioning...' : 'Abort';
+				btn.title = terraformRunning
+					? 'Abort is not allowed while Terraform is provisioning infrastructure'
+					: '';
+			};
 			
 			// Only poll if status is not in a final state
 			const finalStates = ['running', 'error'];
@@ -973,6 +995,12 @@ if (id) {
 						if (response.ok) {
 							const data = await response.json();
 							const currentStatus = data.status;
+							const terraformRunning = Boolean(data.terraform_running);
+
+							if (terraformRunning !== lastTerraformRunning) {
+								updateAbortButton(terraformRunning);
+								lastTerraformRunning = terraformRunning;
+							}
 							
 							// Only reload if status changed
 							if (currentStatus !== lastStatus) {

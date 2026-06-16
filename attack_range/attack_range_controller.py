@@ -228,12 +228,32 @@ class AttackRangeController:
             self.logger.info(f"Configuration saved to: {config_file_path}")
             self.logger.info("="*80 + "\n")
 
-    def build_vpn_phase(self, attack_range_id: str, abort_check: Optional[Callable[[], bool]] = None) -> tuple:
+    def _run_terraform_step(
+        self,
+        terraform_running_callback: Optional[Callable[[bool], None]],
+        step: Callable[[], None],
+    ) -> None:
+        """Run a Terraform step and report running state via callback."""
+        if terraform_running_callback:
+            terraform_running_callback(True)
+        try:
+            step()
+        finally:
+            if terraform_running_callback:
+                terraform_running_callback(False)
+
+    def build_vpn_phase(
+        self,
+        attack_range_id: str,
+        abort_check: Optional[Callable[[], bool]] = None,
+        terraform_running_callback: Optional[Callable[[bool], None]] = None,
+    ) -> tuple:
         """
         Build VPN infrastructure (Phase 1).
         
         :param attack_range_id: Attack range ID
         :param abort_check: Optional callable(); if it returns True, build is aborted (raises RuntimeError).
+        :param terraform_running_callback: Optional callable(bool); called with True before and False after Terraform operations.
         :return: Tuple of (router_public_ip, wireguard_config)
         """
         if abort_check and abort_check():
@@ -268,12 +288,18 @@ class AttackRangeController:
             raise RuntimeError("Build aborted")
 
         # Initialize terraform
-        self.terraform_manager.init(backend_was_created)
+        self._run_terraform_step(
+            terraform_running_callback,
+            lambda: self.terraform_manager.init(backend_was_created),
+        )
         if abort_check and abort_check():
             raise RuntimeError("Build aborted")
 
         # Apply terraform
-        self.terraform_manager.apply()
+        self._run_terraform_step(
+            terraform_running_callback,
+            lambda: self.terraform_manager.apply(),
+        )
         if abort_check and abort_check():
             raise RuntimeError("Build aborted")
 

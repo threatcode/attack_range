@@ -439,11 +439,32 @@ def _wait_abort_then_destroy(attack_range_id: str, config_path: str) -> None:
         pass
 
 
+def _set_terraform_running(attack_range_id: str, running: bool) -> None:
+    """Track whether Terraform is currently provisioning infrastructure for a build."""
+    with operations_lock:
+        op = running_operations.get(attack_range_id)
+        if op is not None:
+            op["terraform_running"] = running
+
+
+def _is_terraform_running(attack_range_id: str) -> bool:
+    with operations_lock:
+        op = running_operations.get(attack_range_id)
+        return bool(op and op.get("terraform_running"))
+
+
+def _is_abort_allowed(attack_range_id: str, status: str) -> bool:
+    build_statuses = ("queued", "build_vpn", "build_lab")
+    return status in build_statuses and not _is_terraform_running(attack_range_id)
+
+
 def _check_abort_and_set_aborted(attack_range_id: str, config_path: Optional[str] = None) -> bool:
     """If abort_requested is set for this attack_range_id, set status to aborted and return True. Else return False."""
     with operations_lock:
         op = running_operations.get(attack_range_id)
         if not op or not op.get("abort_requested"):
+            return False
+        if op.get("terraform_running"):
             return False
         running_operations[attack_range_id]["status"] = "aborted"
         running_operations[attack_range_id]["end_time"] = datetime.now().isoformat()
@@ -474,7 +495,11 @@ def run_build_vpn_phase(config: Dict[str, Any], config_path: str, attack_range_i
         controller = AttackRangeController(config, config_path=config_path)
 
         # Build VPN phase (handles all steps including status updates; checks abort between steps)
-        router_public_ip, wireguard_config = controller.build_vpn_phase(attack_range_id, abort_check=lambda: _check_abort_and_set_aborted(attack_range_id, config_path))
+        router_public_ip, wireguard_config = controller.build_vpn_phase(
+            attack_range_id,
+            abort_check=lambda: _check_abort_and_set_aborted(attack_range_id, config_path),
+            terraform_running_callback=lambda running: _set_terraform_running(attack_range_id, running),
+        )
         
         wireguard_config_path = os.path.join(WIREGUARD_CONFIG_DIR, f"{attack_range_id}.conf")
         
@@ -822,6 +847,11 @@ def destroy_attack_range(body: DestroyRequest):
             status = config_for_status.get("general", {}).get("status") or ""
 
         if status in build_statuses:
+            if _is_terraform_running(attack_range_id):
+                return jsonify(ErrorResponse(
+                    message="Cannot destroy while Terraform is provisioning infrastructure",
+                    details="Wait for Terraform to finish, then retry destroy or abort"
+                ).model_dump()), 400
             with operations_lock:
                 op = running_operations.get(attack_range_id)
                 if op:
@@ -886,7 +916,7 @@ def destroy_attack_range(body: DestroyRequest):
     tags=[attack_range_tag],
     responses={200: DestroyResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse},
     summary="Abort attack range build",
-    description="Abort a build operation in progress. Sets status to 'aborted'."
+    description="Abort a build operation in progress. Sets status to 'aborted'. Not allowed while Terraform is provisioning infrastructure."
 )
 def abort_attack_range(body: DestroyRequest):
     """Abort a build operation by setting abort_requested flag and status to aborted."""
@@ -919,6 +949,12 @@ def abort_attack_range(body: DestroyRequest):
             return jsonify(ErrorResponse(
                 message=f"Cannot abort: attack range is not in a build state. Current status: {status}",
                 details="Abort can only be called during build (queued, build_vpn, build_lab)"
+            ).model_dump()), 400
+
+        if _is_terraform_running(attack_range_id):
+            return jsonify(ErrorResponse(
+                message="Cannot abort while Terraform is provisioning infrastructure",
+                details="Abort is disabled during Terraform init/apply to avoid leaving broken cloud resources. Retry after provisioning completes."
             ).model_dump()), 400
 
         # Set abort_requested flag
@@ -1025,6 +1061,9 @@ def get_attack_range_status(path: AttackRangeIdPath):
         if "result" in operation and "config_file" not in operation["result"]:
             operation["result"]["config_file"] = config_path
     
+    build_statuses = ("queued", "build_vpn", "build_lab")
+    operation["abort_allowed"] = operation.get("status") in build_statuses and not operation.get("terraform_running", False)
+
     # Validate and return as OperationStatusResponse
     return jsonify(OperationStatusResponse(**operation).model_dump()), 200
 

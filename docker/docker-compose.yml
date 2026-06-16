@@ -13,10 +13,14 @@ services:
       - ../ssh_keys:/attack_range/ssh_keys
       # Mount apps directory - playbooks may need to install files from apps folder
       - ../apps:/attack_range/apps
+      # Local role dev: mount a host role checkout, then set ATTACK_RANGE_LOCAL_ROLES (see docker/.env.example)
+      # - ~/projects/ludus_ar_splunk:/local_roles/ludus_ar_splunk:ro
       # Mount all cloud provider credentials
       - ${HOME}/.aws:/root/.aws
       - ${HOME}/.azure:/root/.azure
       - ${HOME}/.config/gcloud:/root/.config/gcloud
+    environment:
+      - ATTACK_RANGE_LOCAL_ROLES=${ATTACK_RANGE_LOCAL_ROLES:-}
     entrypoint: ["python3.12", "attack_range.py"]
     networks:
       - attack-range-network
@@ -35,6 +39,8 @@ services:
       - ../templates:/app/templates:ro
       # Mount apps directory - playbooks may need to install files from apps folder
       - ../apps:/app/apps
+      # Local role dev: mount a host role checkout, then set ATTACK_RANGE_LOCAL_ROLES (see docker/.env.example)
+      # - ~/projects/ludus_ar_splunk:/local_roles/ludus_ar_splunk:ro
       # Mount all cloud provider credentials
       - ${HOME}/.aws:/root/.aws:ro
       # Azure CLI needs write access for session files, so mount as writable
@@ -45,6 +51,7 @@ services:
       - FLASK_ENV=production
       - FLASK_DEBUG=0
       - OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+      - ATTACK_RANGE_LOCAL_ROLES=${ATTACK_RANGE_LOCAL_ROLES:-}
     restart: unless-stopped
     networks:
       - attack-range-network

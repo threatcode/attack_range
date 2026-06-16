@@ -54,6 +54,8 @@ export interface AttackRange {
 	error?: string;
 	error_phase?: string;
 	traceback?: string;
+	terraform_running?: boolean;
+	abort_allowed?: boolean;
 }
 
 export async function fetchTemplates(): Promise<{ templates: Template[]; providerAvailability: Record<string, ProviderAvailability> }> {

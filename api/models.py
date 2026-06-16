@@ -84,6 +84,8 @@ class OperationStatusResponse(BaseModel):
     error: Optional[str] = Field(None, description="Error message (for failed operations)")
     error_phase: Optional[str] = Field(None, description="Build phase where error occurred")
     traceback: Optional[str] = Field(None, description="Error traceback (for failed operations)")
+    terraform_running: Optional[bool] = Field(None, description="True while Terraform init/apply is in progress")
+    abort_allowed: Optional[bool] = Field(None, description="True when abort is permitted for the current build state")
 
 
 class ServerInfo(BaseModel):

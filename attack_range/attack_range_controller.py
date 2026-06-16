@@ -14,7 +14,7 @@ from .logger import setup_logging
 # Import managers
 from .managers.config_manager import ConfigManager
 from .managers.terraform_manager import TerraformManager
-from .managers.ansible_manager import AnsibleManager
+from .managers.ansible_manager import AnsibleManager, APPLY_LOCAL_ROLES_PLAYBOOK
 from .managers.ssh_manager import SSHManager
 from .managers.backend_manager import BackendManager
 
@@ -533,6 +533,115 @@ class AttackRangeController:
         
         # Return execution output for API response
         return execution_output
+
+    def apply_role(self, target: str, roles: list | None = None) -> dict:
+        """
+        Stage and execute local Ansible roles against a target server.
+
+        :param target: Target server name (must match a server name in attack_range config)
+        :param roles: List of dicts with ``path`` (CLI) or ``content_base64`` (API),
+            optional ``name`` override, and optional ``vars``
+        :raises ValueError: If validation fails
+        :raises RuntimeError: If role staging or playbook execution fails
+        """
+        roles = roles or []
+        if not roles:
+            error_msg = "No roles specified. Provide at least one local role."
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        self.logger.info(
+            f"[action] > apply_role on target: {target} with {len(roles)} role(s)\n"
+        )
+
+        status = self.config.get("general", {}).get("status", "")
+        if status not in ["running", "completed"]:
+            error_msg = (
+                f"Cannot apply roles. Attack range status is: {status}. "
+                "Must be 'running' or 'completed'."
+            )
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        attack_range_config = self.config.get("attack_range", [])
+        target_server = None
+        for server in attack_range_config:
+            if server.get("name") == target:
+                target_server = server
+                break
+
+        if not target_server:
+            available_servers = [s.get("name") for s in attack_range_config if s.get("name")]
+            error_msg = f"Target server '{target}' not found in attack_range configuration."
+            self.logger.error(error_msg)
+            raise ValueError(
+                f"{error_msg} Available servers: "
+                f"{', '.join(available_servers) if available_servers else 'None'}"
+            )
+
+        self.ansible_manager.update_inventory_attack_range_servers()
+        self.ansible_manager.update_inventory_password()
+
+        import yaml as yaml_lib
+
+        with open(self.ansible_manager.inventory_path, "r", encoding="utf-8") as f:
+            inventory = yaml_lib.safe_load(f)
+
+        if target not in inventory or "hosts" not in inventory.get(target, {}):
+            available_groups = [
+                k for k, v in inventory.items() if isinstance(v, dict) and "hosts" in v
+            ]
+            error_msg = (
+                f"Inventory group '{target}' not found. "
+                f"Available groups: {', '.join(available_groups) if available_groups else 'None'}"
+            )
+            self.logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        role_specs = []
+        roles_applied = []
+        for role in roles:
+            role_path = role.get("path")
+            content_base64 = role.get("content_base64")
+            name_override = role.get("name")
+            role_vars = role.get("vars") or {}
+
+            if role_path and content_base64:
+                raise ValueError("Each role must specify either path or content_base64, not both.")
+            if not role_path and not content_base64:
+                raise ValueError("Each role must specify either path or content_base64.")
+
+            if role_path:
+                if not os.path.isdir(role_path):
+                    raise ValueError(f"Role path is not a directory: {role_path}")
+                resolved_name = self.ansible_manager.stage_local_role(
+                    os.path.abspath(role_path), name_override
+                )
+            else:
+                resolved_name = self.ansible_manager.stage_local_role_from_tarball(
+                    content_base64, name_override
+                )
+
+            roles_applied.append(resolved_name)
+            role_specs.append({"name": resolved_name, "vars": role_vars})
+
+        become = self.ansible_manager.get_server_become(target)
+        self.ansible_manager.update_apply_roles_playbook(target, role_specs, become)
+
+        self.logger.info(
+            f"Running local roles on {target}: {', '.join(roles_applied)}"
+        )
+        execution_output = self.ansible_manager.run_ansible_playbook_safe(
+            APPLY_LOCAL_ROLES_PLAYBOOK
+        )
+
+        self.logger.info(f"\nRole apply completed successfully on {target}")
+
+        return {
+            "target": target,
+            "roles_applied": roles_applied,
+            "execution_output": execution_output,
+        }
 
     def share(self, name: str) -> str:
         """

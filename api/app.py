@@ -48,6 +48,8 @@ from api.models import (
     ProviderCheckResponse,
     SimulateRequest,
     SimulateResponse,
+    ApplyRoleRequest,
+    ApplyRoleResponse,
     SplunkExportRequest,
     SplunkExportResponse,
     ShareRequest,
@@ -1563,6 +1565,98 @@ def simulate_attack_range(body: SimulateRequest):
         return jsonify(ErrorResponse(
             message="Failed to run simulation",
             details=f"{str(e)}\n\n{error_traceback}"
+        ).model_dump()), 500
+
+
+@app.post(
+    "/attack-range/apply-role",
+    tags=[attack_range_tag],
+    responses={200: ApplyRoleResponse, 400: ErrorResponse, 404: ErrorResponse, 500: ErrorResponse},
+    summary="Apply local Ansible roles",
+    description=(
+        "Stage and execute local Ansible roles against a target server in a running attack range. "
+        "Each role is provided as a base64-encoded gzip tarball of the role root. "
+        "This is a synchronous operation."
+    ),
+)
+def apply_role_attack_range(body: ApplyRoleRequest):
+    """Stage and execute local Ansible roles on a target server."""
+    try:
+        config_path = os.path.join(CONFIG_DIR, f"{body.attack_range_id}.yml")
+        if not os.path.exists(config_path):
+            return jsonify(ErrorResponse(
+                message=f"Attack range with ID '{body.attack_range_id}' not found",
+                details=f"Config file not found: {config_path}",
+            ).model_dump()), 404
+
+        config = load_yaml_file(config_path)
+        if not config:
+            return jsonify(ErrorResponse(
+                message=f"Failed to load config for attack range '{body.attack_range_id}'",
+            ).model_dump()), 500
+
+        status = config.get("general", {}).get("status", "")
+        if status not in ["running", "completed"]:
+            return jsonify(ErrorResponse(
+                message=(
+                    f"Cannot apply roles. Attack range status is '{status}'. "
+                    "Must be 'running' or 'completed'."
+                ),
+            ).model_dump()), 400
+
+        attack_range_config = config.get("attack_range", [])
+        target_found = any(server.get("name") == body.target for server in attack_range_config)
+        if not target_found:
+            available_servers = [s.get("name") for s in attack_range_config if s.get("name")]
+            return jsonify(ErrorResponse(
+                message=f"Target server '{body.target}' not found in attack range configuration",
+                details=f"Available servers: {', '.join(available_servers) if available_servers else 'None'}",
+            ).model_dump()), 400
+
+        controller = AttackRangeController(config, config_path=config_path)
+        try:
+            roles_payload = [
+                {
+                    "content_base64": role.content_base64,
+                    "name": role.name,
+                    "vars": role.vars,
+                }
+                for role in body.roles
+            ]
+            result = controller.apply_role(body.target, roles_payload)
+        except ValueError as e:
+            return jsonify(ErrorResponse(
+                message="Apply role validation failed",
+                details=str(e),
+            ).model_dump()), 400
+        except RuntimeError as e:
+            return jsonify(ErrorResponse(
+                message="Apply role execution failed",
+                details=str(e),
+            ).model_dump()), 500
+
+        roles_applied = result.get("roles_applied", [])
+        return jsonify(ApplyRoleResponse(
+            status="success",
+            message=(
+                f"Successfully applied {len(roles_applied)} role(s) on {body.target}"
+            ),
+            attack_range_id=body.attack_range_id,
+            target=body.target,
+            roles_applied=roles_applied,
+            execution_output=result.get("execution_output"),
+        ).model_dump()), 200
+
+    except ValidationError as e:
+        return jsonify(ErrorResponse(
+            message="Invalid apply-role request",
+            details=str(e),
+        ).model_dump()), 400
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        return jsonify(ErrorResponse(
+            message="Failed to apply roles",
+            details=f"{str(e)}\n\n{error_traceback}",
         ).model_dump()), 500
 
 

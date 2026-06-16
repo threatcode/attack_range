@@ -5,10 +5,14 @@ This module handles Ansible operations including inventory management,
 playbook updates, and playbook execution.
 """
 
+import base64
+import io
 import json
 import os
 import sys
 import re
+import shutil
+import tarfile
 import tempfile
 import yaml
 import time
@@ -17,12 +21,38 @@ import subprocess
 import shlex
 import logging
 import ansible_runner
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 # Galaxy role that must always be updated to latest before VPN playbooks (vpn.yaml, vpn_config.yaml)
 WIREGUARD_GALAXY_ROLE = "p4t12ick.ar_wireguard_vpn"
 WG_CI_CLIENT_CONFIG = "client1.conf"
 WG_CI_ROUTER_IP = "10.0.1.10"
+LOCAL_ROLE_MAX_TAR_BYTES = 50 * 1024 * 1024
+APPLY_LOCAL_ROLES_PLAYBOOK = "apply_local_roles.yaml"
+
+
+def resolve_local_role_name(role_path: str, override: Optional[str] = None) -> str:
+    """Resolve Galaxy-style role name from meta/main.yml or directory basename."""
+    if override and str(override).strip():
+        return str(override).strip()
+
+    meta_candidates = (
+        os.path.join(role_path, "meta", "main.yml"),
+        os.path.join(role_path, "meta", "main.yaml"),
+    )
+    meta_file = next((path for path in meta_candidates if os.path.isfile(path)), None)
+    if meta_file:
+        with open(meta_file, "r", encoding="utf-8") as f:
+            meta = yaml.safe_load(f) or {}
+        galaxy_info = meta.get("galaxy_info") or {}
+        role_name = galaxy_info.get("role_name")
+        namespace = galaxy_info.get("namespace") or galaxy_info.get("author")
+        if role_name and namespace:
+            return f"{namespace}.{role_name}"
+        if role_name:
+            return str(role_name)
+
+    return os.path.basename(os.path.abspath(role_path))
 
 _ART_SUMMARY_TASK_MARKERS = (
     "Atomic Red Team execution summary",
@@ -1327,6 +1357,166 @@ class AnsibleManager:
             sys.exit(1)
 
         self.logger.info(f"All {len(roles_to_install)} ansible galaxy roles installed successfully")
+
+    def _validate_role_directory(self, path: str) -> None:
+        """Require a directory with tasks/main.yml or tasks/main.yaml."""
+        if not os.path.isdir(path):
+            raise ValueError(f"Role path is not a directory: {path}")
+        tasks_candidates = (
+            os.path.join(path, "tasks", "main.yml"),
+            os.path.join(path, "tasks", "main.yaml"),
+        )
+        if not any(os.path.isfile(candidate) for candidate in tasks_candidates):
+            raise ValueError(f"Invalid Ansible role: missing tasks/main.yml at {path}")
+
+    def _resolve_role_name(self, role_path: str, override: Optional[str] = None) -> str:
+        """Resolve Galaxy-style role name from meta/main.yml or directory basename."""
+        return resolve_local_role_name(role_path, override)
+
+    def _local_roles_dir(self) -> str:
+        roles_dir = os.path.join(self.ansible_dir, "roles")
+        os.makedirs(roles_dir, exist_ok=True)
+        return roles_dir
+
+    def _stage_role_copy(self, role_path: str, role_name: str) -> str:
+        """Copy a validated role tree into terraform/ansible/roles/."""
+        self._validate_role_directory(role_path)
+        roles_dir = self._local_roles_dir()
+        dest = os.path.join(roles_dir, role_name)
+        if os.path.exists(dest):
+            self.logger.warning(f"Overwriting existing staged role at {dest}")
+            shutil.rmtree(dest)
+        shutil.copytree(role_path, dest)
+        self.logger.info(f"Staged local role '{role_name}' at {dest}")
+        return role_name
+
+    def _is_safe_tar_member(self, member: tarfile.TarInfo, dest_dir: str) -> bool:
+        if member.name.startswith("/") or member.name.startswith("\\"):
+            return False
+        target = os.path.realpath(os.path.join(dest_dir, member.name))
+        dest_real = os.path.realpath(dest_dir)
+        return target == dest_real or target.startswith(dest_real + os.sep)
+
+    def _find_extracted_role_root(self, extract_dir: str) -> str:
+        try:
+            self._validate_role_directory(extract_dir)
+            return extract_dir
+        except ValueError:
+            pass
+
+        entries = [name for name in os.listdir(extract_dir) if not name.startswith(".")]
+        if len(entries) == 1:
+            candidate = os.path.join(extract_dir, entries[0])
+            if os.path.isdir(candidate):
+                self._validate_role_directory(candidate)
+                return candidate
+
+        for name in entries:
+            candidate = os.path.join(extract_dir, name)
+            if os.path.isdir(candidate):
+                try:
+                    self._validate_role_directory(candidate)
+                    return candidate
+                except ValueError:
+                    continue
+
+        raise ValueError("Could not find a valid Ansible role in tarball (expected tasks/main.yml)")
+
+    def _extract_role_tarball(self, tarball_bytes: bytes, dest_dir: str) -> str:
+        os.makedirs(dest_dir, exist_ok=True)
+        with tarfile.open(fileobj=io.BytesIO(tarball_bytes), mode="r:*") as tar:
+            for member in tar.getmembers():
+                if not self._is_safe_tar_member(member, dest_dir):
+                    raise ValueError(f"Unsafe path in role tarball: {member.name}")
+            extract_kwargs = {}
+            if "filter" in tar.extractall.__code__.co_varnames:
+                extract_kwargs["filter"] = "data"
+            tar.extractall(dest_dir, **extract_kwargs)
+        return self._find_extracted_role_root(dest_dir)
+
+    def stage_local_role(self, role_path: str, name: Optional[str] = None) -> str:
+        """Validate and stage a local role directory on the Ansible controller."""
+        role_path = os.path.abspath(role_path)
+        role_name = self._resolve_role_name(role_path, name)
+        return self._stage_role_copy(role_path, role_name)
+
+    def stage_local_role_from_tarball(self, content_base64: str, name: Optional[str] = None) -> str:
+        """Decode a base64 gzip tarball, extract safely, and stage the role."""
+        try:
+            tarball_bytes = base64.b64decode(content_base64, validate=True)
+        except Exception as exc:
+            raise ValueError(f"Invalid base64 role tarball: {exc}") from exc
+
+        if len(tarball_bytes) > LOCAL_ROLE_MAX_TAR_BYTES:
+            raise ValueError(
+                f"Role tarball exceeds maximum size of {LOCAL_ROLE_MAX_TAR_BYTES} bytes"
+            )
+
+        with tempfile.TemporaryDirectory() as extract_dir:
+            role_root = self._extract_role_tarball(tarball_bytes, extract_dir)
+            role_name = self._resolve_role_name(role_root, name)
+            return self._stage_role_copy(role_root, role_name)
+
+    def get_server_become(self, target: str) -> Optional[bool]:
+        """
+        Return playbook-level become for a target host group.
+
+        None means omit become (default for Windows). True/false set become explicitly.
+        """
+        attack_range_config = self.config.get("attack_range", [])
+        for entry in attack_range_config:
+            entry_name = entry.get("name")
+            roles = entry.get("roles", [])
+            is_match = entry_name == target
+            if not is_match:
+                for role in roles:
+                    if isinstance(role, dict) and role.get("inventory_name") == target:
+                        is_match = True
+                        break
+            if not is_match:
+                continue
+
+            is_windows = entry.get("windows", False)
+            entry_become = entry.get("become")
+            if is_windows:
+                return entry_become
+            if entry_become is not None:
+                return entry_become
+            return True
+
+        return True
+
+    def update_apply_roles_playbook(
+        self,
+        target_host: str,
+        role_specs: List[Dict[str, Any]],
+        become: Optional[bool],
+    ) -> None:
+        """Write apply_local_roles.yaml for staged local roles on a single target."""
+        playbook_path = os.path.join(self.ansible_dir, APPLY_LOCAL_ROLES_PLAYBOOK)
+        play: Dict[str, Any] = {
+            "hosts": target_host,
+            "roles": [],
+        }
+        if become is True:
+            play["become"] = True
+        elif become is False:
+            play["become"] = False
+
+        for spec in role_specs:
+            role_entry: Dict[str, Any] = {"role": spec["name"]}
+            role_vars = spec.get("vars") or {}
+            if role_vars:
+                role_entry["vars"] = role_vars
+            play["roles"].append(role_entry)
+
+        with open(playbook_path, "w", encoding="utf-8") as f:
+            yaml.dump([play], f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+        self.logger.info(
+            f"{APPLY_LOCAL_ROLES_PLAYBOOK} generated for target '{target_host}' "
+            f"with {len(role_specs)} role(s)"
+        )
 
     def _ci_wireguard_config_path(self) -> str:
         return os.path.join(self.ansible_dir, "client_configs", WG_CI_CLIENT_CONFIG)

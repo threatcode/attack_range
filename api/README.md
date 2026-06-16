@@ -178,6 +178,46 @@ Get the status of a build or destroy operation by attack_range_id.
 - `running`: Attack range is fully deployed and running
 - `error`: Operation failed (includes `error`, `error_phase`, and `traceback` fields)
 
+#### `POST /attack-range/apply-role`
+
+Stage and execute local Ansible roles against a target server in a running attack range. This is a **synchronous** operation. The attack range must be in `running` or `completed` status.
+
+Each role is provided as a **base64-encoded gzip tarball** of the role root directory (`tasks/`, `meta/`, etc.). Package a role with:
+
+```bash
+tar czf my_role.tar.gz -C /path/to/parent my_role
+ROLE_B64=$(base64 -i my_role.tar.gz | tr -d '\n')
+```
+
+**Request Body:**
+```json
+{
+  "attack_range_id": "550e8400-e29b-41d4-a716-446655440000",
+  "target": "splunk",
+  "roles": [
+    {
+      "content_base64": "<base64-encoded-role-tarball>",
+      "name": "optional.namespace.role_name",
+      "vars": {
+        "example_var": "value"
+      }
+    }
+  ]
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "status": "success",
+  "message": "Successfully applied 1 role(s) on splunk",
+  "attack_range_id": "550e8400-e29b-41d4-a716-446655440000",
+  "target": "splunk",
+  "roles_applied": ["custom.my_role"],
+  "execution_output": null
+}
+```
+
 ### Template Management
 
 #### `GET /templates`

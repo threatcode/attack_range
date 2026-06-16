@@ -43,7 +43,7 @@ Docker Compose runs the API, web app, and (optionally) the CLI without installin
    docker compose --profile cli -f docker/docker-compose.yml run --rm attack_range build -t aws/splunk_minimal_aws
    ```
 
-   The CLI will prompt you to connect to the VPN, then continue the lab build. Other commands: `destroy`, `simulate`, `share` (see [Configuration](configuration.md) and CLI sections below).
+   The CLI will prompt you to connect to the VPN, then continue the lab build. Other commands: `destroy`, `simulate`, `apply-role`, `share` (see [Configuration](configuration.md) and CLI sections below).
 
 ## Using the Web App
 
@@ -65,6 +65,7 @@ The REST API runs on port **4000** and provides:
 - **List:** `GET /attack-range/list`
 - **Destroy:** `POST /attack-range/destroy` with `attack_range_id`
 - **Simulate:** `POST /attack-range/simulate` with `attack_range_id`, `target`, and `techniques` and/or `atomics` (each atomic: `technique` + `guid` / `auto_generated_guid`)
+- **Apply role:** `POST /attack-range/apply-role` with `attack_range_id`, `target`, and `roles[]` (each role: base64-encoded gzip tarball in `content_base64`, optional `name` and `vars`)
 - **Splunk export:** `POST /attack-range/splunk/export` with `attack_range_id`, `search`, `earliest_time`, `latest_time`, optional `max_results`
 - **Share:** `POST /attack-range/share` with `attack_range_id`, `name`
 - **Templates:** `GET /templates`, `GET /templates/<provider>/<name>`
@@ -99,6 +100,10 @@ You can run the CLI:
 - **simulate** — Run Atomic Red Team techniques (`-te`) and/or specific atomics as `TECHNIQUE:GUID` pairs (`-a`) on a target server.
   - `python attack_range.py simulate -t <target_server_name> -te T1003.001,T1059.003 [-c config]`
   - `python attack_range.py simulate -t <target_server_name> -a T1003.001:0be2230c-9ab3-4ac2-8826-3199b9a0ebf8 [-c config]`
+
+- **apply-role** — Stage and execute local Ansible role directories against a target server after the range is running.
+  - `python attack_range.py apply-role -t <target_server_name> -r /path/to/role [-r /path/to/role2] [--vars-file vars.yml] [-c config]`
+  - `--vars-file` may key variables by role name or provide shared vars for all roles in the request.
 
 - **share** — Generate a new WireGuard client config for sharing.
   - `python attack_range.py share -n alice [-c config]`

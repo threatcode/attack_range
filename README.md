@@ -49,7 +49,7 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
    docker compose --profile cli -f docker/docker-compose.yml run --rm attack_range build -t aws/splunk_minimal_aws
    ```
 
-   Other actions: `destroy`, `simulate`, `share`. See [Detailed documentation](https://attack-range.readthedocs.io/en/latest/) for CLI usage and flags.
+   Other actions: `destroy`, `simulate`, `apply-role`, `share`. See [Detailed documentation](https://attack-range.readthedocs.io/en/latest/) for CLI usage and flags.
 
 ---
 
@@ -60,7 +60,7 @@ The Splunk Attack Range builds instrumented cloud environments (AWS, Azure, GCP)
 | **Docker Compose** (recommended) | Run API + web app + optional CLI with one `docker compose`; no local Python/Ansible/Terraform. |
 | **Web app** | Build, destroy, simulate, and share via the UI at port 4321. |
 | **REST API** | Automate from scripts or CI; full OpenAPI docs at `/openapi/swagger`. |
-| **CLI** | `attack_range.py build | destroy | simulate | share` for terminal-based workflows. |
+| **CLI** | `attack_range.py build | destroy | simulate | apply-role | share` for terminal-based workflows. |
 
 ---
 

@@ -311,6 +311,60 @@ class SimulateResponse(BaseModel):
     )
 
 
+class LocalRoleTarget(BaseModel):
+    """Local Ansible role packaged as a base64-encoded gzip tarball."""
+    content_base64: str = Field(
+        ...,
+        description="Base64-encoded gzip tarball of the role root (tasks/, meta/, etc.)",
+    )
+    name: Optional[str] = Field(
+        None,
+        description="Optional Ansible role name override (defaults to meta/main.yml or directory name)",
+    )
+    vars: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional variables passed to the role",
+    )
+
+
+class ApplyRoleRequest(BaseModel):
+    """Request model for applying local Ansible roles after build."""
+    attack_range_id: str = Field(..., description="Attack range ID")
+    target: str = Field(..., description="Target server name (must match a server name in attack_range config)")
+    roles: List[LocalRoleTarget] = Field(
+        ...,
+        min_length=1,
+        description="Local roles to stage and execute on the target host",
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "attack_range_id": "550e8400-e29b-41d4-a716-446655440000",
+                "target": "splunk",
+                "roles": [
+                    {
+                        "content_base64": "<base64-encoded-role-tarball>",
+                        "vars": {"example_var": "value"},
+                    }
+                ],
+            }
+        }
+
+
+class ApplyRoleResponse(BaseModel):
+    """Response model for apply-role operation."""
+    status: str = Field(..., description="Operation status")
+    message: str = Field(..., description="Status message")
+    attack_range_id: str = Field(..., description="Attack range ID")
+    target: str = Field(..., description="Target server name")
+    roles_applied: List[str] = Field(..., description="Resolved Ansible role names that were applied")
+    execution_output: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Optional Ansible execution details",
+    )
+
+
 class SplunkExportRequest(BaseModel):
     """Request model for exporting raw events from the attack range Splunk server."""
     attack_range_id: str = Field(..., description="Attack range ID")
